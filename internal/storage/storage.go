@@ -1,0 +1,223 @@
+// Package storage owns the bytes on disk.
+//
+// Every user file is an ordinary file at the path the user sees. Nothing here
+// may depend on the index: the index is rebuilt from what this package stores,
+// never the other way round.
+package storage
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path"
+	"syscall"
+	"time"
+)
+
+// ErrNoSpace means the write was refused before it started, to keep the volume
+// from filling. Reads, listings and deletes are unaffected by design.
+var ErrNoSpace = errors.New("insufficient free space")
+
+// Root is one user's storage root.
+type Root struct {
+	root    *os.Root
+	dir     string
+	minFree int64
+}
+
+// Info describes a file's content as stored.
+type Info struct {
+	Size     int64
+	Checksum string // hex SHA-256
+	ModTime  time.Time
+}
+
+// Open opens dir as a storage root, creating it and the .drive layout if they
+// do not exist yet. minFree is the number of bytes of headroom to keep free on
+// the volume; writes are refused below it.
+func Open(dir string, minFree int64) (*Root, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("creating storage root %s: %w", dir, err)
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("opening storage root %s: %w", dir, err)
+	}
+	for _, sub := range []string{Internal, Internal + "/tmp", Internal + "/trash", Internal + "/thumbs"} {
+		if err := root.MkdirAll(sub, 0o700); err != nil {
+			root.Close()
+			return nil, fmt.Errorf("creating %s in %s: %w", sub, dir, err)
+		}
+	}
+	return &Root{root: root, dir: dir, minFree: minFree}, nil
+}
+
+func (r *Root) Dir() string  { return r.dir }
+func (r *Root) Close() error { return r.root.Close() }
+
+// Write streams src to rel: temp file, fsync the file, rename into place,
+// fsync the parent directory. rel does not exist until its content is
+// complete and durable, so an interrupted write cannot be observed.
+//
+// size is the expected byte count for the space guard, or -1 when unknown.
+//
+// The final rename never follows a symlink already at rel: the link is
+// replaced by the new file. That is deliberate, and it is what stops a write
+// from reaching a target outside the root.
+func (r *Root) Write(rel string, src io.Reader, size int64) (Info, error) {
+	name, err := relPath(rel)
+	if err != nil {
+		return Info{}, err
+	}
+	if err := r.checkSpace(size); err != nil {
+		return Info{}, err
+	}
+
+	tmp, f, err := r.createTemp()
+	if err != nil {
+		return Info{}, err
+	}
+	committed := false
+	defer func() {
+		f.Close()
+		if !committed {
+			r.root.Remove(tmp) // never leave temp data behind on a failed write
+		}
+	}()
+
+	sum := sha256.New()
+	written, err := io.Copy(f, io.TeeReader(src, sum))
+	if err != nil {
+		return Info{}, fmt.Errorf("writing %s: %w", rel, err)
+	}
+	if err := f.Sync(); err != nil {
+		return Info{}, fmt.Errorf("flushing %s: %w", rel, err)
+	}
+	if err := f.Close(); err != nil {
+		return Info{}, fmt.Errorf("closing %s: %w", rel, err)
+	}
+	if err := r.root.Rename(tmp, name); err != nil {
+		return Info{}, fmt.Errorf("publishing %s: %w", rel, err)
+	}
+	committed = true
+	// A rename is atomic but not durable until the containing directory is
+	// synced. Without this, "upload succeeded" plus power loss can lose the file.
+	if err := r.syncDir(path.Dir(name)); err != nil {
+		return Info{}, err
+	}
+
+	info := Info{Size: written, Checksum: hex.EncodeToString(sum.Sum(nil))}
+	if st, err := r.root.Stat(name); err == nil {
+		info.ModTime = st.ModTime()
+	}
+	return info, nil
+}
+
+// Checksum hashes a file's current contents without modifying it. Used when a
+// file that arrived outside the application is indexed for the first time, and
+// by Verify.
+func (r *Root) Checksum(rel string) (Info, error) {
+	name, err := relPath(rel)
+	if err != nil {
+		return Info{}, err
+	}
+	f, err := r.root.Open(name)
+	if err != nil {
+		return Info{}, err
+	}
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil {
+		return Info{}, err
+	}
+	if st.IsDir() {
+		return Info{}, fmt.Errorf("%w: %q is a directory", ErrInvalidPath, rel)
+	}
+	sum := sha256.New()
+	if _, err := io.Copy(sum, f); err != nil {
+		return Info{}, fmt.Errorf("reading %s: %w", rel, err)
+	}
+	return Info{Size: st.Size(), Checksum: hex.EncodeToString(sum.Sum(nil)), ModTime: st.ModTime()}, nil
+}
+
+// Mismatch is one file whose contents no longer match what was recorded.
+type Mismatch struct {
+	Path string
+	Want string
+	Got  string // empty when the file could not be read
+	Err  error
+}
+
+// Verify recomputes checksums for the given paths and reports the ones that no
+// longer match. It only reads: nothing is deleted, quarantined, or repaired.
+// Reporting is the whole job, because the recorded checksum can be the wrong
+// one just as easily as the bytes can be.
+//
+// ponytail: takes the expected set in memory. Feed it in pages from the index
+// if a root ever holds more paths than that comfortably fits.
+func (r *Root) Verify(want map[string]string) []Mismatch {
+	var bad []Mismatch
+	for rel, checksum := range want {
+		info, err := r.Checksum(rel)
+		switch {
+		case err != nil:
+			bad = append(bad, Mismatch{Path: rel, Want: checksum, Err: err})
+		case info.Checksum != checksum:
+			bad = append(bad, Mismatch{Path: rel, Want: checksum, Got: info.Checksum})
+		}
+	}
+	return bad
+}
+
+func (r *Root) createTemp() (string, *os.File, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", nil, fmt.Errorf("naming temp file: %w", err)
+	}
+	name := Internal + "/tmp/" + hex.EncodeToString(b[:])
+	f, err := r.root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return "", nil, fmt.Errorf("creating temp file: %w", err)
+	}
+	return name, f, nil
+}
+
+func (r *Root) syncDir(dir string) error {
+	d, err := r.root.Open(dir)
+	if err != nil {
+		return fmt.Errorf("opening %s to flush it: %w", dir, err)
+	}
+	defer d.Close()
+	if err := d.Sync(); err != nil {
+		return fmt.Errorf("flushing directory %s: %w", dir, err)
+	}
+	return nil
+}
+
+func (r *Root) checkSpace(size int64) error {
+	if size < 0 {
+		size = 0
+	}
+	avail, err := freeBytes(r.dir)
+	if err != nil {
+		return err
+	}
+	if avail-size < r.minFree {
+		return fmt.Errorf("%w: %d bytes free, this write needs %d and %d are reserved",
+			ErrNoSpace, avail, size, r.minFree)
+	}
+	return nil
+}
+
+func freeBytes(dir string) (int64, error) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(dir, &st); err != nil {
+		return 0, fmt.Errorf("checking free space on %s: %w", dir, err)
+	}
+	return int64(st.Bavail) * int64(st.Bsize), nil
+}
