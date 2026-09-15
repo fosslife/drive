@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sparkenstein/drive/internal/config"
-	"github.com/Sparkenstein/drive/internal/index"
-	"github.com/Sparkenstein/drive/internal/server"
+	"github.com/fosslife/drive/internal/config"
+	"github.com/fosslife/drive/internal/index"
+	"github.com/fosslife/drive/internal/server"
 )
 
 // Version is overridden at build time with -ldflags "-X main.Version=v1.2.3".

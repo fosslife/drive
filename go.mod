@@ -1,4 +1,4 @@
-module github.com/Sparkenstein/drive
+module github.com/fosslife/drive
 
 go 1.27
 
