@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, href } from './api.js'
-import { formatDate, formatSize, isImage } from './format.js'
+import { formatDate, formatSize, isImage, splitExtension } from './format.js'
 import { ShareDialog } from './panels.jsx'
 import { uploadFile } from './upload.js'
 import { ROW_HEIGHT, windowOf } from './virtual.js'
@@ -116,6 +116,21 @@ export function Browser({ route, navigate }) {
     })
   }
 
+  const clearSelection = useCallback(() => {
+    anchor.current = null
+    setSelected(new Set())
+  }, [])
+
+  // Escape drops the selection, the way clicking past the last row does. A
+  // selection with no way out but picking a different row is a trap: the
+  // toolbar keeps offering to delete something you have stopped pointing at.
+  useEffect(() => {
+    if (viewing || sharing) return // those screens own Escape while they are up
+    const onKey = (e) => e.key === 'Escape' && clearSelection()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [viewing, sharing, clearSelection])
+
   // act runs one operation and turns any refusal into a message naming the
   // cause. Every mutation in this screen goes through it, so 13.13 is one place.
   const act = async (fn) => {
@@ -137,18 +152,27 @@ export function Browser({ route, navigate }) {
     if (name) act(() => api('/api/folders', { method: 'POST', body: { path: join(path, name) } }))
   }
 
+  // The extension is held back rather than offered for editing. A prompt cannot
+  // preselect just the stem the way an inline rename field does, so the whole
+  // name comes up selected and the first keystroke takes ".pdf" with it.
+  //
+  // ponytail: the cost is that an extension cannot be changed here at all.
+  // Both halves go back in the box when rename becomes a real inline field.
   const rename = () => {
     const entry = chosen[0]
-    const name = window.prompt(`Rename "${entry.name}" to`, entry.name)
-    if (name && name !== entry.name) {
-      act(() =>
-        api('/api/move', {
-          method: 'POST',
-          body: { from: entry.path, to: join(parentOf(entry.path), name), replace: false },
-          etag: entry.etag,
-        }),
-      )
-    }
+    const [stem, ext] = entry.kind === 'folder' ? [entry.name, ''] : splitExtension(entry.name)
+    const typed = window.prompt(ext ? `Rename "${entry.name}" to (${ext} is kept)` : `Rename "${entry.name}" to`, stem)
+    if (typed === null) return
+
+    const name = typed.trim() + ext
+    if (!typed.trim() || name === entry.name) return
+    act(() =>
+      api('/api/move', {
+        method: 'POST',
+        body: { from: entry.path, to: join(parentOf(entry.path), name), replace: false },
+        etag: entry.etag,
+      }),
+    )
   }
 
   const move = () => {
@@ -241,7 +265,7 @@ export function Browser({ route, navigate }) {
       ) : entries.length === 0 ? (
         <p className="note">{query ? 'Nothing matched.' : 'This folder is empty. Drop files here to upload.'}</p>
       ) : (
-        <VirtualList count={entries.length} onNearEnd={listing.more}>
+        <VirtualList count={entries.length} onNearEnd={listing.more} onBlankClick={clearSelection}>
           {(i) => (
             <Row
               key={entries[i].id}
@@ -331,7 +355,7 @@ function Toolbar({ path, query, navigate, chosen, onNewFolder, onRename, onMove,
   )
 }
 
-function VirtualList({ count, onNearEnd, children }) {
+function VirtualList({ count, onNearEnd, onBlankClick, children }) {
   const ref = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [height, setHeight] = useState(600)
@@ -355,7 +379,13 @@ function VirtualList({ count, onNearEnd, children }) {
   for (let i = first; i < last; i++) rows.push(children(i))
 
   return (
-    <div className="rows" ref={ref} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
+    <div
+      className="rows"
+      ref={ref}
+      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      // A click past the last row is how every file manager drops a selection.
+      onClick={(e) => !e.target.closest('.row') && onBlankClick()}
+    >
       <div style={{ height: padTop }} />
       {rows}
       <div style={{ height: padBottom }} />

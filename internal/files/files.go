@@ -265,6 +265,15 @@ func Move(db *index.DB, userID int64, root *storage.Root, from, to string, repla
 		}
 		return Entry{}, err
 	}
+	// Rename creates any missing parent on disk, so index it here the way
+	// CreateFolder, Finish and Restore do. Without this the moved entry sits
+	// under a folder that has no row, which means no listing can reach it: the
+	// file is on disk, indexed, and invisible until the next scan.
+	if dir, _ := index.SplitPath(to); dir != "" {
+		if err := indexFolders(db, userID, root, dir); err != nil {
+			return Entry{}, err
+		}
+	}
 	tx, err := db.Begin()
 	if err != nil {
 		return Entry{}, fmt.Errorf("moving %q: %w", from, err)

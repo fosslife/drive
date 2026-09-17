@@ -358,6 +358,43 @@ func TestCreateRenameAndMovePreserveIdentity(t *testing.T) {
 	}
 }
 
+// A move into a folder that does not exist yet creates it on disk, so the index
+// has to gain it too. Without that the moved file is on disk, indexed, and
+// unreachable: its parent has no row, so no listing contains either of them and
+// the drive looks empty until the next scan.
+func TestMovingIntoANewFolderLeavesBothVisible(t *testing.T) {
+	h, ada, secret := withFiles(t)
+
+	if w := h.as(secret, "POST", "/api/move", map[string]any{"from": "notes.txt", "to": "A/B/notes.txt"}); w.Code != http.StatusOK {
+		t.Fatalf("moving into a new folder: %d %s", w.Code, w.Body.String())
+	}
+
+	if !slicesContains(h.list(t, secret, "").Entries, "A") {
+		t.Fatalf("the created parent is not in the top-level listing: %+v", h.list(t, secret, "").Entries)
+	}
+	if !slicesContains(h.list(t, secret, "A").Entries, "B") {
+		t.Errorf("the intermediate folder is not listed: %+v", h.list(t, secret, "A").Entries)
+	}
+	if !slicesContains(h.list(t, secret, "A/B").Entries, "notes.txt") {
+		t.Errorf("the moved file is not in its new folder: %+v", h.list(t, secret, "A/B").Entries)
+	}
+	if body := h.as(secret, "GET", "/api/download/A/B/notes.txt", nil).Body.String(); body != "ada's notes" {
+		t.Errorf("contents after the move: %q", body)
+	}
+
+	// And the folders the move invented are the ones the reconciler finds, not
+	// duplicates of them.
+	h.scan(ada)
+	var folders int
+	if err := h.db.QueryRow(`SELECT count(*) FROM files WHERE user_id = ? AND kind = 'folder' AND name IN ('A', 'B')`,
+		ada.ID).Scan(&folders); err != nil {
+		t.Fatal(err)
+	}
+	if folders != 2 {
+		t.Errorf("%d rows for the two created folders, want 2", folders)
+	}
+}
+
 // 7.5: a move onto an occupied name is refused, and neither side changes.
 func TestMoveOntoAnExistingNameIsRefused(t *testing.T) {
 	h, ada, secret := withFiles(t)

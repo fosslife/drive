@@ -96,6 +96,11 @@ describe('the web interface', { skip: chromePath() ? false : 'no Chrome on this 
     const picker = await page.$('input[type="file"]')
     await picker.uploadFile(...paths)
     await page.waitForFunction(() => !document.querySelector('.uploads'), { timeout: 120000 })
+    // The queue emptying and the folder refreshing are two different moments.
+    // Reloading collapses them, so a test that uploads then looks for the row
+    // is not racing the listing that puts it there.
+    await page.reload({ waitUntil: 'networkidle0' })
+    await page.waitForSelector('.row')
   }
 
   // 13.2
@@ -138,6 +143,65 @@ describe('the web interface', { skip: chromePath() ? false : 'no Chrome on this 
     await clickText(page, '.toolbar button', 'Delete')
     await page.waitForFunction(() => !document.body.textContent.includes('Papers'))
     assert.ok(!existsSync(join(drive.userDir(USER), 'Papers')), 'still in the folder after deleting')
+  })
+
+  // A selection you cannot drop is a trap: the toolbar keeps offering to delete
+  // something you have stopped pointing at.
+  test('a selection is dropped by clicking past the rows, by Escape, and by ctrl-click', async () => {
+    await home()
+    await upload(['selectable.txt'], ['pick me\n'])
+
+    const selectedCount = () => page.$$eval('.row.on', (r) => r.length)
+
+    await clickRowNamed(page, 'selectable.txt', { open: false })
+    assert.equal(await selectedCount(), 1, 'the row did not select')
+
+    // Past the last row: the blank part of the scroll container.
+    const box = await page.$eval('.rows', (el) => {
+      const r = el.getBoundingClientRect()
+      return { x: r.x + r.width / 2, y: r.bottom - 10 }
+    })
+    await page.mouse.click(box.x, box.y)
+    await page.waitForFunction(() => document.querySelectorAll('.row.on').length === 0)
+
+    await clickRowNamed(page, 'selectable.txt', { open: false })
+    assert.equal(await selectedCount(), 1)
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(() => document.querySelectorAll('.row.on').length === 0)
+
+    // And ctrl-click toggles the row it lands on.
+    await clickRowNamed(page, 'selectable.txt', { open: false })
+    await page.keyboard.down('Control')
+    await page.click('.row')
+    await page.keyboard.up('Control')
+    assert.equal(await selectedCount(), 0, 'ctrl-click did not deselect')
+  })
+
+  // Renaming used to offer the whole filename, so replacing it dropped the
+  // extension and left an unopenable file behind.
+  test('renaming a file keeps its extension', async () => {
+    await home()
+    await upload(['report.pdf'], ['not really a pdf\n'])
+
+    await clickRowNamed(page, 'report.pdf', { open: false })
+    // Capture what the prompt offers: that is what a user replaces wholesale.
+    await page.evaluate(() => {
+      window.__offered = null
+      window.prompt = (_message, value) => {
+        window.__offered = value
+        return 'quarterly'
+      }
+    })
+
+    await clickText(page, '.toolbar button', 'Rename')
+    await page.waitForFunction(() => document.body.textContent.includes('quarterly.pdf'))
+    assert.equal(
+      await page.evaluate(() => window.__offered),
+      'report',
+      'the prompt offered the extension for editing',
+    )
+    assert.ok(existsSync(join(drive.userDir(USER), 'quarterly.pdf')), 'the renamed file is not on disk')
+    assert.ok(!existsSync(join(drive.userDir(USER), 'quarterly')), 'the rename dropped the extension')
   })
 
   // 13.3: the virtualisation claim. 100,000 rows, and the list stays a screenful.

@@ -22,3 +22,11 @@ export const formatDate = (iso) => new Date(iso).toLocaleString()
 const VIEWABLE = /\.(jpe?g|png|gif|webp)$/i
 
 export const isImage = (entry) => entry.kind === 'file' && VIEWABLE.test(entry.name)
+
+// splitExtension returns [stem, extension]. A leading dot is part of the name,
+// not an extension — ".gitignore" is a file called .gitignore — and only the
+// last suffix counts, so "backup.tar.gz" keeps ".gz".
+export function splitExtension(name) {
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, '']
+}
