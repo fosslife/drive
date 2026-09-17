@@ -202,10 +202,16 @@ func (r *Root) Rename(from, to string) error {
 	return r.syncDir(path.Dir(dst))
 }
 
-// Trash moves rel into .drive/trash/<id>/, which the reconciler skips and
-// listings exclude. The id namespaces it so two files deleted from different
-// folders with the same name do not collide; the original path stays in the
-// index as the restore target.
+// trashPath is where a trashed entry's content lives: the entry itself, moved
+// under its own identifier. The id namespaces it so two files deleted from
+// different folders with the same name do not collide, and the original path
+// stays in the index as the restore target rather than on disk.
+func trashPath(id int64) string { return fmt.Sprintf("%s/trash/%d", Internal, id) }
+
+const trashRoot = Internal + "/trash"
+
+// Trash moves rel into .drive/trash, which the reconciler skips and listings
+// exclude. A folder takes its contents with it in the one rename.
 //
 // This is a move, not a delete. Nothing here frees a byte.
 func (r *Root) Trash(id int64, rel string) error {
@@ -213,17 +219,67 @@ func (r *Root) Trash(id int64, rel string) error {
 	if err != nil {
 		return err
 	}
-	dir := fmt.Sprintf("%s/trash/%d", Internal, id)
-	if err := r.root.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("preparing trash for %s: %w", rel, err)
-	}
-	if err := r.root.Rename(name, dir+"/"+path.Base(name)); err != nil {
+	if err := r.root.Rename(name, trashPath(id)); err != nil {
 		return fmt.Errorf("trashing %s: %w", rel, err)
 	}
 	if err := r.syncDir(path.Dir(name)); err != nil {
 		return err
 	}
-	return r.syncDir(dir)
+	return r.syncDir(trashRoot)
+}
+
+// Restore moves a trashed entry back to rel, creating any missing parent
+// because the original folder may itself have been deleted in the meantime.
+//
+// It refuses an occupied destination: restoring is not allowed to overwrite
+// what has taken the path since. The caller picks another name and tries again.
+func (r *Root) Restore(id int64, rel string) error {
+	name, err := relPath(rel)
+	if err != nil {
+		return err
+	}
+	switch _, err := r.root.Lstat(name); {
+	case err == nil:
+		return fmt.Errorf("%w: %q", ErrExists, rel)
+	case !errors.Is(err, fs.ErrNotExist):
+		return err
+	}
+	if dir := path.Dir(name); dir != "." {
+		if err := r.root.MkdirAll(dir, 0o700); err != nil {
+			return fmt.Errorf("creating %s: %w", dir, err)
+		}
+	}
+	if err := r.root.Rename(trashPath(id), name); err != nil {
+		return fmt.Errorf("restoring %s: %w", rel, err)
+	}
+	if err := r.syncDir(trashRoot); err != nil {
+		return err
+	}
+	return r.syncDir(path.Dir(name))
+}
+
+// OpenTrashed opens a file inside a trashed entry. rel is relative to the
+// trashed entry itself: empty for a trashed file, "sub/a.txt" for something
+// that went to trash inside a folder. Trash is a move, so it is all still there.
+func (r *Root) OpenTrashed(id int64, rel string) (*os.File, error) {
+	name := trashPath(id)
+	if rel != "" {
+		if _, err := relPath(rel); err != nil {
+			return nil, err
+		}
+		name += "/" + rel
+	}
+	return r.root.Open(name)
+}
+
+// Purge destroys a trashed entry's content, folder and all. It is the only
+// operation anywhere that frees bytes a user has seen, which is why the path it
+// removes is computed from an identifier and can never leave the trash.
+func (r *Root) Purge(id int64) error {
+	if err := r.root.RemoveAll(trashPath(id)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("deleting trashed item %d: %w", id, err)
+	}
+	return r.syncDir(trashRoot)
 }
 
 // CreateUpload opens an empty file under .drive/tmp to receive a resumable

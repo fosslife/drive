@@ -387,8 +387,7 @@ func TestMoveOntoAnExistingNameIsRefused(t *testing.T) {
 		t.Errorf("the destination after the replace: %q", got)
 	}
 
-	trashed, err := os.ReadFile(filepath.Join(h.dataDir, "users", "ada", ".drive", "trash",
-		fmt.Sprint(displaced.ID), "journal.txt"))
+	trashed, err := os.ReadFile(h.trashPath(ada, displaced.ID))
 	if err != nil || string(trashed) != "the other file" {
 		t.Errorf("the replaced content in trash: %q %v, want it intact", trashed, err)
 	}

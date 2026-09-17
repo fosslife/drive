@@ -18,6 +18,7 @@ const (
 	EnvMinFree      = "DRIVE_MIN_FREE_BYTES"
 	EnvScanInterval = "DRIVE_SCAN_INTERVAL"
 	EnvUploadTTL    = "DRIVE_UPLOAD_RETENTION"
+	EnvTrashTTL     = "DRIVE_TRASH_RETENTION"
 )
 
 // DefaultMinFree is the headroom kept on the data volume. A full disk is not
@@ -35,12 +36,18 @@ const DefaultScanInterval = 15 * time.Minute
 // the night, short enough that an abandoned 4 GB upload is not permanent.
 const DefaultUploadTTL = 24 * time.Hour
 
+// DefaultTrashTTL is how long a deleted file stays recoverable before it is
+// permanently deleted. Zero means never: an instance that would rather buy
+// disks than lose a file sets DRIVE_TRASH_RETENTION=0 and keeps everything.
+const DefaultTrashTTL = 30 * 24 * time.Hour
+
 type Config struct {
 	DataDir      string
 	Addr         string
 	MinFree      int64
 	ScanInterval time.Duration
 	UploadTTL    time.Duration
+	TrashTTL     time.Duration
 }
 
 // IndexPath is the SQLite index, which is disposable: deleting it loses no
@@ -70,6 +77,7 @@ func Load() (Config, error) {
 		MinFree:      DefaultMinFree,
 		ScanInterval: DefaultScanInterval,
 		UploadTTL:    DefaultUploadTTL,
+		TrashTTL:     DefaultTrashTTL,
 	}
 	if v := os.Getenv(EnvDataDir); v != "" {
 		c.DataDir = v
@@ -97,6 +105,15 @@ func Load() (Config, error) {
 			return Config{}, &InvalidError{EnvUploadTTL, v, "a positive duration, for example 24h"}
 		}
 		c.UploadTTL = d
+	}
+	if v := os.Getenv(EnvTrashTTL); v != "" {
+		// Zero is meaningful here and nowhere else: it is the never-expire
+		// setting, so the bound is non-negative rather than positive.
+		d, err := time.ParseDuration(v)
+		if err != nil || d < 0 {
+			return Config{}, &InvalidError{EnvTrashTTL, v, "a duration such as 720h, or 0 to keep deleted files forever"}
+		}
+		c.TrashTTL = d
 	}
 	return c, c.validate()
 }

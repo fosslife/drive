@@ -105,6 +105,7 @@ func run() error {
 	// large root takes minutes and must not delay the port opening.
 	go scanner.Run(ctx)
 	go reclaimUploads(ctx, db, cfg.DataDir, cfg.UploadTTL)
+	go expireTrash(ctx, db, cfg.DataDir, cfg.TrashTTL)
 
 	go func() {
 		<-ctx.Done()
@@ -134,6 +135,33 @@ func reclaimUploads(ctx context.Context, db *index.DB, dataDir string, ttl time.
 			slog.Error("reclaiming abandoned uploads", "error", err)
 		} else if n > 0 {
 			slog.Info("reclaimed abandoned uploads", "uploads", n, "older_than", ttl)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// expireTrash permanently deletes what has sat in the trash past the retention
+// period. Like the upload sweep it runs on its own timer, well away from the
+// reconciler. A retention of zero switches it off: deleted files then stay
+// until someone asks for them to go.
+func expireTrash(ctx context.Context, db *index.DB, dataDir string, ttl time.Duration) {
+	if ttl <= 0 {
+		slog.Info("trash never expires", "reason", config.EnvTrashTTL+"=0")
+		return
+	}
+	// Hourly at most: the retention period is measured in days, and the cost of
+	// noticing an expiry an hour late is nothing.
+	ticker := time.NewTicker(min(max(ttl/10, time.Minute), time.Hour))
+	defer ticker.Stop()
+	for {
+		if n, err := files.ExpireTrash(db, dataDir, ttl); err != nil {
+			slog.Error("expiring trash", "error", err)
+		} else if n > 0 {
+			slog.Info("permanently deleted expired trash", "items", n, "older_than", ttl)
 		}
 		select {
 		case <-ctx.Done():

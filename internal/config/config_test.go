@@ -10,7 +10,7 @@ import (
 // emptyEnv simulates starting with no environment at all.
 func emptyEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{EnvDataDir, EnvAddr, EnvMinFree, EnvScanInterval, "XDG_DATA_HOME", "HOME"} {
+	for _, k := range []string{EnvDataDir, EnvAddr, EnvMinFree, EnvScanInterval, EnvTrashTTL, "XDG_DATA_HOME", "HOME"} {
 		t.Setenv(k, "")
 	}
 }
@@ -34,6 +34,35 @@ func TestLoadWithEmptyEnvironment(t *testing.T) {
 	if c.MinFree != DefaultMinFree || c.ScanInterval != DefaultScanInterval {
 		t.Errorf("reserve %d and scan interval %s, want %d and %s",
 			c.MinFree, c.ScanInterval, DefaultMinFree, DefaultScanInterval)
+	}
+	if c.TrashTTL != DefaultTrashTTL {
+		t.Errorf("TrashTTL = %s, want %s", c.TrashTTL, DefaultTrashTTL)
+	}
+}
+
+// 9.4: the retention period is configurable, and zero is the never-expire
+// setting rather than "delete immediately" or a rejected value.
+func TestTrashRetentionAcceptsZeroAsNever(t *testing.T) {
+	emptyEnv(t)
+	t.Setenv(EnvTrashTTL, "0")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load with %s=0: %v", EnvTrashTTL, err)
+	}
+	if c.TrashTTL != 0 {
+		t.Errorf("TrashTTL = %s, want 0 meaning never expire", c.TrashTTL)
+	}
+
+	t.Setenv(EnvTrashTTL, "168h")
+	if c, err := Load(); err != nil || c.TrashTTL != 168*time.Hour {
+		t.Errorf("TrashTTL = %s, %v, want 168h", c.TrashTTL, err)
+	}
+
+	t.Setenv(EnvTrashTTL, "-1h")
+	var invalid *InvalidError
+	if _, err := Load(); !errors.As(err, &invalid) || invalid.Name != EnvTrashTTL {
+		t.Errorf("a negative retention loaded as %v, want an *InvalidError naming %s", err, EnvTrashTTL)
 	}
 }
 

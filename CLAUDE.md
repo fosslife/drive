@@ -39,7 +39,8 @@ internal/server/    HTTP surface
 ```
 
 Environment: `DRIVE_DATA_DIR`, `DRIVE_ADDR`, `DRIVE_MIN_FREE_BYTES` (plain byte count, default 1 GiB),
-`DRIVE_SCAN_INTERVAL` (Go duration, default 15m), `DRIVE_UPLOAD_RETENTION` (Go duration, default 24h).
+`DRIVE_SCAN_INTERVAL` (Go duration, default 15m), `DRIVE_UPLOAD_RETENTION` (Go duration, default 24h),
+`DRIVE_TRASH_RETENTION` (Go duration, default 720h; `0` means never expire).
 
 Data directory (default `$XDG_DATA_HOME/drive`, else `~/.local/share/drive`, else `/var/lib/drive`):
 
@@ -162,6 +163,20 @@ users/<username>/         storage root, user files at their real paths
   restorable version.
 - `DRIVE_UPLOAD_RETENTION` (default 24h) bounds abandoned upload data. `files.Reclaim` runs on its own
   ticker in `main`, **not** inside the reconciler, which has no delete path and must keep it that way.
+- Trash content lives at `.drive/trash/<id>` — the entry itself moved under its own identifier, not a
+  directory holding it. A folder goes in one rename, contents and all, and restore is the rename back.
+- `files.trash_root` (schema v4) is the id of the entry that was actually deleted, carried by it and by
+  every row under it. It is what makes the trash list a folder once instead of once per file, and what
+  restore and purge take as a unit. A trashed row keeps its original `(dir, name)` as the restore target.
+- Restore **never overwrites and never fails for want of a path**: a deleted parent is recreated, and an
+  occupied path sends the item to `notes (2).txt` with the response reporting where it actually landed.
+- `files.Purge` is the only function in the codebase that destroys user content, and
+  `internal/files/destruction_test.go` is the enforcement: it parses every non-test file and fails on any
+  `Remove`/`RemoveAll`/`Truncate`/`os.Create`/`O_TRUNC` outside a four-entry allowlist, plus any
+  `DELETE FROM files` outside `Purge`. **Adding one means adding an entry with a reason.**
+- `DRIVE_TRASH_RETENTION` defaults to 30 days; `0` is never-expire, the one setting where zero means
+  "do nothing" rather than "do it immediately". `files.ExpireTrash` runs on its own ticker in `main`,
+  next to the upload sweep and nowhere near the reconciler.
 - Memory-ceiling tests assert on `MemStats.TotalAlloc`, never `HeapAlloc`: total allocation is monotonic,
   so it does not depend on when the collector happened to run. `HeapAlloc` flaked under `-race`.
 - `strace` is not installed on this machine — task 15.2 needs it.

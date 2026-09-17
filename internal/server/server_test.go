@@ -81,6 +81,13 @@ func (h *harness) put(u *auth.User, rel, content string) {
 	}
 }
 
+// trashPath is where a trashed entry's content sits on disk: the entry itself,
+// moved under its own identifier. Tests read it directly to assert that trash
+// is a move and not a delete.
+func (h *harness) trashPath(u *auth.User, id int64) string {
+	return filepath.Join(h.dataDir, "users", u.Username, ".drive", "trash", fmt.Sprint(id))
+}
+
 // scan runs the reconciler over one user's root, which is how files that
 // arrived on disk become browsable.
 func (h *harness) scan(u *auth.User) {

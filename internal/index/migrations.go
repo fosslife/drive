@@ -3,7 +3,7 @@ package index
 // migrations are applied in order, forward only. Each entry is one schema
 // version: index 0 takes the index to version 1. Never edit a shipped
 // migration, append a new one.
-var migrations = []string{schemaV1, schemaV2, schemaV3}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4}
 
 // Identity is an INTEGER PRIMARY KEY AUTOINCREMENT throughout: SQLite recycles
 // plain rowids after the highest row is deleted, AUTOINCREMENT does not.
@@ -107,4 +107,15 @@ CREATE INDEX files_listing ON files(user_id, dir, state, name);
 const schemaV3 = `
 ALTER TABLE uploads ADD COLUMN replace INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX uploads_stale ON uploads(updated_at);
+`
+
+// Deleting a folder trashes its whole subtree in one rename, so every row under
+// it is trashed too. trash_root is the identifier of the entry that was
+// actually deleted, carried by itself and by every descendant: it is what the
+// trash listing shows one row for, what restore moves back as a unit, and what
+// names the content's location under .drive/trash.
+const schemaV4 = `
+ALTER TABLE files ADD COLUMN trash_root INTEGER;
+UPDATE files SET trash_root = id WHERE state = 'trashed';
+CREATE INDEX files_trash ON files(user_id, trash_root, trashed_at);
 `

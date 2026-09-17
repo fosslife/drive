@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -347,9 +346,7 @@ func TestReplacementMovesPreviousContentToTrash(t *testing.T) {
 	h.put(ada, "notes.txt", "version one")
 	h.scan(ada)
 
-	trashPath := func(id int64) string {
-		return filepath.Join(h.dataDir, "users", "ada", ".drive", "trash", fmt.Sprint(id), "notes.txt")
-	}
+	trashPath := func(id int64) string { return h.trashPath(ada, id) }
 	current := func() files.Entry {
 		return entryNamed(t, h.list(t, c.secret, "").Entries, "notes.txt")
 	}

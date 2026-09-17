@@ -245,22 +245,24 @@ func Move(db *index.DB, userID int64, root *storage.Root, from, to string, repla
 		}
 		return Entry{}, err
 	}
-	if err := reparent(db, userID, src, to); err != nil {
+	tx, err := db.Begin()
+	if err != nil {
+		return Entry{}, fmt.Errorf("moving %q: %w", from, err)
+	}
+	defer tx.Rollback()
+	if err := reparent(tx, userID, src, to); err != nil {
 		return Entry{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Entry{}, fmt.Errorf("moving %q: %w", from, err)
 	}
 	return Lookup(db, userID, to)
 }
 
 // reparent rewrites the moved row's path and, for a folder, the stored dir of
-// everything beneath it. One transaction: a subtree half at each path would
-// show the same file twice.
-func reparent(db *index.DB, userID int64, src Entry, to string) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("moving %q: %w", src.Path, err)
-	}
-	defer tx.Rollback()
-
+// everything beneath it. It takes the caller's transaction: a subtree half at
+// each path would show the same file twice.
+func reparent(tx *sql.Tx, userID int64, src Entry, to string) error {
 	dir, name := index.SplitPath(to)
 	if _, err := tx.Exec(`UPDATE files SET dir = ?, name = ? WHERE id = ?`, dir, name, src.ID); err != nil {
 		return fmt.Errorf("moving %q: %w", src.Path, err)
@@ -275,38 +277,7 @@ func reparent(db *index.DB, userID int64, src Entry, to string) error {
 			return fmt.Errorf("moving the contents of %q: %w", src.Path, err)
 		}
 	}
-	return tx.Commit()
-}
-
-// Trash moves an entry out of the user's tree into .drive/trash, where it stops
-// appearing in listings and searches but keeps its original path as the restore
-// target. It destroys nothing.
-func Trash(db *index.DB, userID int64, root *storage.Root, e Entry) error {
-	if err := root.Trash(e.ID, e.Path); err != nil {
-		return err
-	}
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("trashing %q: %w", e.Path, err)
-	}
-	defer tx.Rollback()
-
-	now := time.Now().Unix()
-	if _, err := tx.Exec(`UPDATE files SET state = 'trashed', trashed_at = ? WHERE id = ?`, now, e.ID); err != nil {
-		return fmt.Errorf("trashing %q: %w", e.Path, err)
-	}
-	if e.Kind == "folder" {
-		// The whole subtree went with it. Marking each row keeps it out of
-		// listings and stops the reconciler reporting it as vanished.
-		cut := utf8.RuneCountInString(e.Path) + 1
-		if _, err := tx.Exec(`UPDATE files SET state = 'trashed', trashed_at = ?
-		                      WHERE user_id = ? AND state = 'present'
-		                        AND (dir = ? OR substr(dir, 1, ?) = ?)`,
-			now, userID, e.Path, cut, e.Path+"/"); err != nil {
-			return fmt.Errorf("trashing the contents of %q: %w", e.Path, err)
-		}
-	}
-	return tx.Commit()
+	return nil
 }
 
 // Descendants streams every present file and folder under an entry, deepest

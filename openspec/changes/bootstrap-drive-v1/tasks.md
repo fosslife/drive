@@ -74,11 +74,11 @@
 
 ## 9. Trash
 
-- [ ] 9.1 Move deleted files and folders into `.drive/trash` recording their original path, excluding them from listings and search; verify a test asserts a deleted file is absent from its folder, present in trash, and still readable
-- [ ] 9.2 Delete a folder and its contents into trash as one unit restorable together; verify a test asserts restoring the folder restores every descendant
-- [ ] 9.3 Restore an item to its original path, recreating a missing parent or reporting a clear fallback location; verify tests cover both the normal case and the deleted-parent case, asserting the file is never lost
-- [ ] 9.4 Implement permanent deletion on demand and automatic expiry after a configurable retention period defaulting to 30 days, with a never-expire setting; verify tests assert expiry removes the file and frees space, and that never-expire retains it
-- [ ] 9.5 Confirm permanent deletion is the only code path that destroys user file content; verify by grepping for file removal and truncating-write calls and asserting each is reachable only from permanent delete, overwrite-to-trash, or temp cleanup
+- [x] 9.1 Move deleted files and folders into `.drive/trash` recording their original path, excluding them from listings and search; verify a test asserts a deleted file is absent from its folder, present in trash, and still readable
+- [x] 9.2 Delete a folder and its contents into trash as one unit restorable together; verify a test asserts restoring the folder restores every descendant
+- [x] 9.3 Restore an item to its original path, recreating a missing parent or reporting a clear fallback location; verify tests cover both the normal case and the deleted-parent case, asserting the file is never lost
+- [x] 9.4 Implement permanent deletion on demand and automatic expiry after a configurable retention period defaulting to 30 days, with a never-expire setting; verify tests assert expiry removes the file and frees space, and that never-expire retains it
+- [x] 9.5 Confirm permanent deletion is the only code path that destroys user file content; verify by grepping for file removal and truncating-write calls and asserting each is reachable only from permanent delete, overwrite-to-trash, or temp cleanup
 
 ## 10. Search
 

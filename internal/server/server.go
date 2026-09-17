@@ -67,6 +67,12 @@ func (s *Server) routes() []route {
 		{"GET /api/archive", false, s.archive},
 		{"POST /api/folders", false, s.createFolder},
 		{"POST /api/move", false, s.move},
+		{"DELETE /api/files/{path...}", false, s.deleteFile},
+
+		{"GET /api/trash", false, s.listTrash},
+		{"DELETE /api/trash", false, s.emptyTrash},
+		{"POST /api/trash/{id}/restore", false, s.restore},
+		{"DELETE /api/trash/{id}", false, s.purge},
 
 		{"OPTIONS /api/uploads", false, s.uploadOptions},
 		{"POST /api/uploads", false, s.createUpload},
