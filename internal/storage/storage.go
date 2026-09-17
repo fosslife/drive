@@ -6,6 +6,7 @@
 package storage
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -89,6 +90,12 @@ func (r *Root) Write(rel string, src io.Reader, size int64) (Info, error) {
 		}
 	}
 
+	return r.publish(name, src)
+}
+
+// publish is the atomic pipeline itself, over a path this package has already
+// decided is legal: temp file, fsync, rename, fsync the parent.
+func (r *Root) publish(name string, src io.Reader) (Info, error) {
 	tmp, f, err := r.createTemp()
 	if err != nil {
 		return Info{}, err
@@ -104,16 +111,16 @@ func (r *Root) Write(rel string, src io.Reader, size int64) (Info, error) {
 	sum := sha256.New()
 	written, err := io.Copy(f, io.TeeReader(src, sum))
 	if err != nil {
-		return Info{}, fmt.Errorf("writing %s: %w", rel, err)
+		return Info{}, fmt.Errorf("writing %s: %w", name, err)
 	}
 	if err := f.Sync(); err != nil {
-		return Info{}, fmt.Errorf("flushing %s: %w", rel, err)
+		return Info{}, fmt.Errorf("flushing %s: %w", name, err)
 	}
 	if err := f.Close(); err != nil {
-		return Info{}, fmt.Errorf("closing %s: %w", rel, err)
+		return Info{}, fmt.Errorf("closing %s: %w", name, err)
 	}
 	if err := r.root.Rename(tmp, name); err != nil {
-		return Info{}, fmt.Errorf("publishing %s: %w", rel, err)
+		return Info{}, fmt.Errorf("publishing %s: %w", name, err)
 	}
 	committed = true
 	// A rename is atomic but not durable until the containing directory is
@@ -280,6 +287,40 @@ func (r *Root) Purge(id int64) error {
 		return fmt.Errorf("deleting trashed item %d: %w", id, err)
 	}
 	return r.syncDir(trashRoot)
+}
+
+// Thumbnails live in .drive/thumbs, one per file identity. The cache is
+// derived data: every path here can be deleted at any moment, and the only
+// consequence is that the next request makes the picture again.
+func thumbPath(id int64) string { return fmt.Sprintf("%s/thumbs/%d.jpg", Internal, id) }
+
+// OpenThumb opens a cached thumbnail. A miss is fs.ErrNotExist, which the
+// caller answers by generating one.
+func (r *Root) OpenThumb(id int64) (*os.File, error) { return r.root.Open(thumbPath(id)) }
+
+// WriteThumb publishes a thumbnail through the same atomic pipeline as user
+// data: two requests racing to generate the same picture must not leave a
+// half-written one behind. The directory is recreated because deleting the
+// whole cache is a supported thing to do.
+//
+// No space guard: a thumbnail is tens of kilobytes, and refusing to draw one
+// does not meaningfully protect a volume that is already full.
+func (r *Root) WriteThumb(id int64, data []byte) error {
+	if err := r.root.MkdirAll(Internal+"/thumbs", 0o700); err != nil {
+		return fmt.Errorf("preparing the thumbnail cache: %w", err)
+	}
+	_, err := r.publish(thumbPath(id), bytes.NewReader(data))
+	return err
+}
+
+// DiscardThumb removes a cached thumbnail. It is called when a file is
+// permanently deleted: "permanently deleted" that leaves a recognisable
+// picture of the file behind is not what anybody was told.
+func (r *Root) DiscardThumb(id int64) error {
+	if err := r.root.Remove(thumbPath(id)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("discarding a thumbnail: %w", err)
+	}
+	return nil
 }
 
 // CreateUpload opens an empty file under .drive/tmp to receive a resumable

@@ -14,6 +14,7 @@ import (
 	"github.com/fosslife/drive/internal/auth"
 	"github.com/fosslife/drive/internal/index"
 	"github.com/fosslife/drive/internal/scan"
+	"github.com/fosslife/drive/internal/thumb"
 )
 
 type Server struct {
@@ -23,6 +24,7 @@ type Server struct {
 	users      *auth.Store
 	sessions   *scs.SessionManager
 	limiter    *auth.Limiter
+	thumbs     *thumb.Cache
 }
 
 func New(db *index.DB, users *auth.Store, sessions *scs.SessionManager, scanStatus func() scan.Status) *Server {
@@ -32,6 +34,7 @@ func New(db *index.DB, users *auth.Store, sessions *scs.SessionManager, scanStat
 		users:      users,
 		sessions:   sessions,
 		limiter:    auth.NewLimiter(auth.DefaultMaxFailures, auth.DefaultFailureWindow),
+		thumbs:     thumb.NewCache(0),
 	}
 }
 
@@ -63,6 +66,7 @@ func (s *Server) routes() []route {
 		{"POST /api/shares/{token}/unlock", true, s.unlockShare},
 		{"GET /api/shares/{token}/list", true, s.shareList},
 		{"GET /api/shares/{token}/download/{path...}", true, s.shareDownload},
+		{"GET /api/shares/{token}/thumb/{path...}", true, s.shareThumb},
 
 		{"POST /api/logout", false, s.logout},
 		{"GET /api/me", false, s.me},
@@ -72,6 +76,7 @@ func (s *Server) routes() []route {
 		{"GET /api/search", false, s.search},
 		{"GET /api/download/{path...}", false, s.download},
 		{"GET /api/archive", false, s.archive},
+		{"GET /api/thumb/{path...}", false, s.thumbnail},
 		{"POST /api/folders", false, s.createFolder},
 		{"POST /api/move", false, s.move},
 		{"DELETE /api/files/{path...}", false, s.deleteFile},

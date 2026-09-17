@@ -97,14 +97,14 @@
 
 ## 12. Previews
 
-- [ ] 12.1 Generate thumbnails for JPEG, PNG, GIF, and WebP preserving aspect ratio, using stdlib and `golang.org/x/image` with no external media toolchain; verify a test asserts thumbnails are produced on a machine with no additional media software installed
-- [ ] 12.2 Apply EXIF orientation so rotated photographs display upright; verify a test asserts a rotated source produces a correctly oriented thumbnail
-- [ ] 12.3 Report no-thumbnail-available for unsupported types without breaking listing or download; verify a test asserts a video file is still listed, downloadable, and shareable
-- [ ] 12.4 Generate thumbnails off the listing path via a bounded worker pool so listings never wait; verify a test asserts a 1,000-image folder with no thumbnails returns its listing immediately
-- [ ] 12.5 Cache thumbnails, invalidate on source change, and record failures so they are not retried on every request; verify tests assert a repeat request is served from cache, that a changed source yields a new thumbnail, and that a corrupt image is not reprocessed repeatedly
-- [ ] 12.6 Treat the thumbnail cache as derived data regenerable after deletion; verify a test deletes the whole cache and asserts no user file is affected and thumbnails regenerate
-- [ ] 12.7 Enforce that thumbnail access follows the underlying file's access rules including share links and revocation; verify tests cover another user, a valid share link, and a revoked share link
-- [ ] 12.8 Serve full-size images for in-place viewing under the same access rules and the inline allowlist from task 7.8; verify a test asserts an allowlisted image is served inline and a non-allowlisted type is not
+- [x] 12.1 Generate thumbnails for JPEG, PNG, GIF, and WebP preserving aspect ratio, using stdlib and `golang.org/x/image` with no external media toolchain; verify a test asserts thumbnails are produced on a machine with no additional media software installed
+- [x] 12.2 Apply EXIF orientation so rotated photographs display upright; verify a test asserts a rotated source produces a correctly oriented thumbnail
+- [x] 12.3 Report no-thumbnail-available for unsupported types without breaking listing or download; verify a test asserts a video file is still listed, downloadable, and shareable
+- [x] 12.4 Generate thumbnails off the listing path via a bounded worker pool so listings never wait; verify a test asserts a 1,000-image folder with no thumbnails returns its listing immediately
+- [x] 12.5 Cache thumbnails, invalidate on source change, and record failures so they are not retried on every request; verify tests assert a repeat request is served from cache, that a changed source yields a new thumbnail, and that a corrupt image is not reprocessed repeatedly
+- [x] 12.6 Treat the thumbnail cache as derived data regenerable after deletion; verify a test deletes the whole cache and asserts no user file is affected and thumbnails regenerate
+- [x] 12.7 Enforce that thumbnail access follows the underlying file's access rules including share links and revocation; verify tests cover another user, a valid share link, and a revoked share link
+- [x] 12.8 Serve full-size images for in-place viewing under the same access rules and the inline allowlist from task 7.8; verify a test asserts an allowlisted image is served inline and a non-allowlisted type is not
 
 ## 13. Frontend
 

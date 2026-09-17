@@ -3,7 +3,7 @@ package index
 // migrations are applied in order, forward only. Each entry is one schema
 // version: index 0 takes the index to version 1. Never edit a shipped
 // migration, append a new one.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5}
 
 // Identity is an INTEGER PRIMARY KEY AUTOINCREMENT throughout: SQLite recycles
 // plain rowids after the highest row is deleted, AUTOINCREMENT does not.
@@ -118,4 +118,17 @@ const schemaV4 = `
 ALTER TABLE files ADD COLUMN trash_root INTEGER;
 UPDATE files SET trash_root = id WHERE state = 'trashed';
 CREATE INDEX files_trash ON files(user_id, trash_root, trashed_at);
+`
+
+// What is known about a file's thumbnail, which is not the thumbnail itself:
+// the picture is a file under .drive/thumbs and can be deleted at any time.
+// version is the source version it was made from, so a changed file is a miss;
+// a 'failed' row is what stops a corrupt image being decoded on every request.
+const schemaV5 = `
+CREATE TABLE thumbs (
+    file_id    INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+    version    TEXT    NOT NULL,
+    state      TEXT    NOT NULL CHECK (state IN ('ready', 'failed')),
+    updated_at INTEGER NOT NULL
+);
 `

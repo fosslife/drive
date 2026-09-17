@@ -36,6 +36,7 @@ internal/scan/      the reconciler: filesystem → index, add/update/mark-missin
 internal/auth/      accounts, Argon2id passwords, scs sessions, API tokens, failed-login limiter
 internal/files/     browse, create, rename, move, trash: index reads, filesystem writes
 internal/share/     public links: create, resolve, confine to one subtree
+internal/thumb/     thumbnails: decode, orient, scale, cache as derived data
 internal/server/    HTTP surface
 ```
 
@@ -196,6 +197,23 @@ users/<username>/         storage root, user files at their real paths
 - The confinement is `files.Lookup` by `(user_id, dir, name)`: stored paths are canonical, so a
   non-canonical `rel` cannot match any row. `fs.ValidPath` and `Access.contains` are assertions on
   top of that, not the mechanism.
+- Thumbnails are 256px JPEGs at `.drive/thumbs/<id>.jpg`, written through the same atomic pipeline.
+  **Listings never touch them**: the client asks `GET /api/thumb/{path...}` per row, and generation is
+  bounded by a counting semaphore (`NumCPU/2`) on the requesting goroutine, so a cancelled request
+  stops costing immediately. `thumbs` (schema v5) holds `version` (the source ETag) and `state`;
+  a changed source is a miss, and a `failed` row is what stops a corrupt JPEG being decoded forever.
+- The cache is derived data: deleting `.drive/thumbs` wholesale is supported, and a row saying `ready`
+  with no file on disk regenerates. **Purging a file discards its thumbnail** — a permanent delete that
+  leaves a recognisable picture behind has not deleted anything.
+- EXIF orientation is read by hand in `internal/thumb/exif.go` (JPEG APP1 → TIFF IFD0 → tag 0x0112),
+  bounded to the first 64 KiB and total: anything it does not understand is orientation 1. An EXIF
+  library is a big dependency with a parser-bug history for a 2-byte answer. Take one if thumbnails
+  ever need the date, the camera, or the GPS position.
+- `golang.org/x/image` is for **WebP decoding and CatmullRom scaling** only. There is no WebP encoder in
+  Go, so the WebP test fixture is 46 checked-in base64 bytes.
+- Full-size in-place viewing (12.8) is `GET /api/download/{path...}` without `?download`: 7.8's inline
+  allowlist already does exactly this, so there is no second endpoint. Thumbnails are served `inline`
+  because they are our own re-encoded pixels, not stored bytes.
 - Memory-ceiling tests assert on `MemStats.TotalAlloc`, never `HeapAlloc`: total allocation is monotonic,
   so it does not depend on when the collector happened to run. `HeapAlloc` flaked under `-race`.
 - `strace` is not installed on this machine — task 15.2 needs it.

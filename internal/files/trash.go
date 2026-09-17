@@ -205,6 +205,17 @@ func Purge(db *index.DB, userID int64, root *storage.Root, id int64) error {
 	if err != nil {
 		return err
 	}
+	// The thumbnails go first, and for the whole subtree: a permanent delete
+	// that leaves a picture of the file behind has not deleted it.
+	ids, err := subtreeIDs(db, userID, id)
+	if err != nil {
+		return err
+	}
+	for _, fileID := range ids {
+		if err := root.DiscardThumb(fileID); err != nil {
+			return err
+		}
+	}
 	if err := root.Purge(id); err != nil {
 		return err
 	}
@@ -301,8 +312,18 @@ func trashedRoot(db *index.DB, userID, id int64) (Entry, error) {
 }
 
 func trashedRootIDs(db *index.DB, userID int64) ([]int64, error) {
-	rs, err := db.Query(`SELECT id FROM files
+	return queryIDs(db, `SELECT id FROM files
 	                     WHERE user_id = ? AND state = 'trashed' AND trash_root = id`, userID)
+}
+
+// subtreeIDs is every row that went to the trash in one deletion, the deleted
+// entry included.
+func subtreeIDs(db *index.DB, userID, trashRoot int64) ([]int64, error) {
+	return queryIDs(db, `SELECT id FROM files WHERE user_id = ? AND trash_root = ?`, userID, trashRoot)
+}
+
+func queryIDs(db *index.DB, query string, args ...any) ([]int64, error) {
+	rs, err := db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("reading the trash: %w", err)
 	}

@@ -291,6 +291,7 @@ func TestEveryRouteIsAuthenticatedOrExplicitlyPublic(t *testing.T) {
 		"POST /api/shares/{token}/unlock":            true,
 		"GET /api/shares/{token}/list":               true,
 		"GET /api/shares/{token}/download/{path...}": true,
+		"GET /api/shares/{token}/thumb/{path...}":    true,
 	}
 	// A new entry here is the moment to ask why.
 

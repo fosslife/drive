@@ -22,9 +22,10 @@ func TestOnlyPermanentDeleteDestroysContent(t *testing.T) {
 	// permanent deletion, the trash step of an overwrite, or cleanup of
 	// temporary data no user has ever seen.
 	allowed := map[string]string{
-		"internal/storage/storage.go:Write":         "removes its own temp file when the write failed; the destination is never touched",
+		"internal/storage/storage.go:publish":       "removes its own temp file when the write failed; the destination is never touched",
 		"internal/storage/storage.go:Purge":         "permanent deletion, the one place bytes are destroyed on purpose",
 		"internal/storage/storage.go:DiscardUpload": "removes an abandoned upload's temp data, which has no destination yet",
+		"internal/storage/storage.go:DiscardThumb":  "removes a cached thumbnail, derived data the next request makes again",
 	}
 
 	eachFunc(t, func(site string, fn *ast.FuncDecl) {
