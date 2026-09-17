@@ -5,20 +5,25 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // Environment variables. An unset or empty value means "use the default".
 const (
-	EnvDataDir      = "DRIVE_DATA_DIR"
-	EnvAddr         = "DRIVE_ADDR"
-	EnvMinFree      = "DRIVE_MIN_FREE_BYTES"
-	EnvScanInterval = "DRIVE_SCAN_INTERVAL"
-	EnvUploadTTL    = "DRIVE_UPLOAD_RETENTION"
-	EnvTrashTTL     = "DRIVE_TRASH_RETENTION"
+	EnvDataDir       = "DRIVE_DATA_DIR"
+	EnvAddr          = "DRIVE_ADDR"
+	EnvMinFree       = "DRIVE_MIN_FREE_BYTES"
+	EnvScanInterval  = "DRIVE_SCAN_INTERVAL"
+	EnvUploadTTL     = "DRIVE_UPLOAD_RETENTION"
+	EnvTrashTTL      = "DRIVE_TRASH_RETENTION"
+	EnvHostname      = "DRIVE_HOSTNAME"
+	EnvACMEEmail     = "DRIVE_ACME_EMAIL"
+	EnvACMEDirectory = "DRIVE_ACME_DIRECTORY"
 )
 
 // DefaultMinFree is the headroom kept on the data volume. A full disk is not
@@ -41,6 +46,10 @@ const DefaultUploadTTL = 24 * time.Hour
 // disks than lose a file sets DRIVE_TRASH_RETENTION=0 and keeps everything.
 const DefaultTrashTTL = 30 * 24 * time.Hour
 
+// DefaultACMEDirectory is Let's Encrypt. DRIVE_ACME_DIRECTORY points at a
+// staging or private CA instead; certificates from it are not publicly trusted.
+const DefaultACMEDirectory = "https://acme-v02.api.letsencrypt.org/directory"
+
 type Config struct {
 	DataDir      string
 	Addr         string
@@ -48,6 +57,14 @@ type Config struct {
 	ScanInterval time.Duration
 	UploadTTL    time.Duration
 	TrashTTL     time.Duration
+
+	// Hostname is the public name a certificate is obtained for, and the only
+	// switch for HTTPS there is. Empty means plaintext: no name means no CA
+	// will vouch for the drive, and a certificate it signs for itself is a
+	// browser warning rather than security.
+	Hostname      string
+	ACMEEmail     string
+	ACMEDirectory string
 }
 
 // IndexPath is the SQLite index, which is disposable: deleting it loses no
@@ -56,6 +73,11 @@ func (c Config) IndexPath() string { return filepath.Join(c.DataDir, "index.db")
 
 // UsersDir holds one storage root per user.
 func (c Config) UsersDir() string { return filepath.Join(c.DataDir, "users") }
+
+// CertsDir is where CertMagic keeps the account key and the certificates it
+// obtains. Like the index it is rebuildable: deleting it costs one more trip
+// to the CA. It does not exist at all unless a hostname is configured.
+func (c Config) CertsDir() string { return filepath.Join(c.DataDir, "certs") }
 
 // InvalidError names the offending value and what was expected.
 type InvalidError struct {
@@ -72,15 +94,29 @@ func (e *InvalidError) Error() string {
 // was started: the caller must exit rather than run half-configured.
 func Load() (Config, error) {
 	c := Config{
-		DataDir:      defaultDataDir(),
-		Addr:         ":8080",
-		MinFree:      DefaultMinFree,
-		ScanInterval: DefaultScanInterval,
-		UploadTTL:    DefaultUploadTTL,
-		TrashTTL:     DefaultTrashTTL,
+		DataDir:       defaultDataDir(),
+		MinFree:       DefaultMinFree,
+		ScanInterval:  DefaultScanInterval,
+		UploadTTL:     DefaultUploadTTL,
+		TrashTTL:      DefaultTrashTTL,
+		ACMEDirectory: DefaultACMEDirectory,
 	}
 	if v := os.Getenv(EnvDataDir); v != "" {
 		c.DataDir = v
+	}
+	if v := os.Getenv(EnvHostname); v != "" {
+		c.Hostname = v
+	}
+	c.ACMEEmail = os.Getenv(EnvACMEEmail)
+	if v := os.Getenv(EnvACMEDirectory); v != "" {
+		c.ACMEDirectory = v
+	}
+	// A hostname worth obtaining a certificate for is one the world reaches on
+	// the port the world uses; :8080 would answer nothing that matters.
+	if c.Hostname != "" {
+		c.Addr = ":443"
+	} else {
+		c.Addr = ":8080"
 	}
 	if v := os.Getenv(EnvAddr); v != "" {
 		c.Addr = v
@@ -130,7 +166,34 @@ func (c Config) validate() error {
 	if err != nil || n < 1 || n > 65535 {
 		return &InvalidError{EnvAddr, c.Addr, "a port between 1 and 65535"}
 	}
+	if c.Hostname != "" && !validHostname(c.Hostname) {
+		return &InvalidError{EnvHostname, c.Hostname, "a bare DNS name such as drive.example.com, with no scheme, port, or path"}
+	}
+	if u, err := url.Parse(c.ACMEDirectory); err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+		return &InvalidError{EnvACMEDirectory, c.ACMEDirectory, "the URL of an ACME directory, for example " + DefaultACMEDirectory}
+	}
 	return nil
+}
+
+// validHostname accepts what a certificate can name: DNS labels, nothing else.
+// A scheme, a port, or a path here is a misunderstanding worth catching at
+// startup rather than at the first failed ACME order.
+func validHostname(h string) bool {
+	if len(h) > 253 || strings.HasPrefix(h, "-") || strings.HasSuffix(h, "-") {
+		return false
+	}
+	for _, label := range strings.Split(h, ".") {
+		if label == "" || len(label) > 63 {
+			return false
+		}
+		for _, r := range label {
+			alnum := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+			if !alnum && r != '-' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func defaultDataDir() string {

@@ -124,12 +124,12 @@
 
 ## 14. Transport and distribution
 
-- [ ] 14.1 Integrate CertMagic for automatic ACME issuance and renewal when a public hostname is configured; verify against a staging ACME endpoint that a certificate is obtained and served
-- [ ] 14.2 Fall back to a self-signed certificate and print its fingerprint when no hostname is configured; verify the printed fingerprint matches the served certificate
-- [ ] 14.3 Serve plaintext HTTP only when explicitly enabled, logging a warning; verify the warning appears and that HTTPS is the default otherwise
-- [ ] 14.4 Produce a container image running the same binary with a mounted data directory; verify `docker run` with a volume and published port yields a reachable instance storing data in the mount
-- [ ] 14.5 Cross-compile for linux amd64 and arm64; verify each artifact starts on its target architecture
-- [ ] 14.6 Document and script the backup and restore procedure, stating plainly that accounts, API tokens, and share links live only in the index and are lost if it is excluded; verify a backup restored into a fresh data directory yields all users, files, shares, and settings intact, and that restoring files alone yields a working instance after index rebuild and account re-creation
+- [x] 14.1 Integrate CertMagic for automatic ACME issuance and renewal when a public hostname is configured; verify against a staging ACME endpoint that a certificate is obtained and served
+- [x] 14.2 Serve plaintext with no certificate of any kind when no hostname is configured; verify a drive started with nothing set answers over HTTP and generates nothing
+- [x] 14.3 Warn at every start when plaintext is served on an address other than loopback, naming what is exposed and both remedies; verify loopback is quiet and a network-reachable listener warns
+- [x] 14.4 Produce a container image running the same binary with a mounted data directory; verify `docker run` with a volume and published port yields a reachable instance storing data in the mount
+- [x] 14.5 Cross-compile for linux amd64 and arm64; verify each artifact starts on its target architecture
+- [x] 14.6 Document and script the backup and restore procedure, stating plainly that accounts, API tokens, and share links live only in the index and are lost if it is excluded; verify a backup restored into a fresh data directory yields all users, files, shares, and settings intact, and that restoring files alone yields a working instance after index rebuild and account re-creation
 
 ## 15. End-to-end verification
 

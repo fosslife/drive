@@ -10,7 +10,8 @@ import (
 // emptyEnv simulates starting with no environment at all.
 func emptyEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{EnvDataDir, EnvAddr, EnvMinFree, EnvScanInterval, EnvTrashTTL, "XDG_DATA_HOME", "HOME"} {
+	for _, k := range []string{EnvDataDir, EnvAddr, EnvMinFree, EnvScanInterval, EnvTrashTTL,
+		EnvHostname, EnvACMEEmail, EnvACMEDirectory, "XDG_DATA_HOME", "HOME"} {
 		t.Setenv(k, "")
 	}
 }
@@ -66,6 +67,29 @@ func TestTrashRetentionAcceptsZeroAsNever(t *testing.T) {
 	}
 }
 
+// 14.3: a hostname is the only switch for HTTPS, and setting one moves the
+// port with it, because a certificate for a public name is only useful on the
+// port the public connects to.
+func TestTransportDefaults(t *testing.T) {
+	emptyEnv(t)
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.Hostname != "" || c.ACMEDirectory != DefaultACMEDirectory {
+		t.Errorf("hostname %q, directory %q, want no hostname and Let's Encrypt", c.Hostname, c.ACMEDirectory)
+	}
+
+	t.Setenv(EnvHostname, "drive.example.com")
+	if c, err := Load(); err != nil || c.Addr != ":443" {
+		t.Errorf("with a hostname the address is %q (%v), want :443", c.Addr, err)
+	}
+	t.Setenv(EnvAddr, "127.0.0.1:8443")
+	if c, err := Load(); err != nil || c.Addr != "127.0.0.1:8443" {
+		t.Errorf("explicit address became %q (%v)", c.Addr, err)
+	}
+}
+
 func TestEnvironmentOverrides(t *testing.T) {
 	emptyEnv(t)
 	t.Setenv(EnvDataDir, "/srv/drive")
@@ -99,28 +123,30 @@ func TestXDGDataHome(t *testing.T) {
 
 func TestInvalidConfigurationIsRejected(t *testing.T) {
 	cases := []struct {
-		name     string
-		dataDir  string
-		addr     string
-		interval string
-		want     string // the value the error must name
+		name string
+		env  map[string]string
+		want string // the value the error must name
 	}{
-		{"relative data dir", "relative/path", "", "", EnvDataDir},
-		{"data dir with no leading slash", "srv", "", "", EnvDataDir},
-		{"address with no port", "", "localhost", "", EnvAddr},
-		{"port out of range", "", ":70000", "", EnvAddr},
-		{"non-numeric port", "", ":http", "", EnvAddr},
-		{"unparseable scan interval", "", "", "soon", EnvScanInterval},
-		{"scan interval with no unit", "", "", "60", EnvScanInterval},
-		{"zero scan interval", "", "", "0s", EnvScanInterval},
-		{"negative scan interval", "", "", "-5m", EnvScanInterval},
+		{"relative data dir", map[string]string{EnvDataDir: "relative/path"}, EnvDataDir},
+		{"data dir with no leading slash", map[string]string{EnvDataDir: "srv"}, EnvDataDir},
+		{"address with no port", map[string]string{EnvAddr: "localhost"}, EnvAddr},
+		{"port out of range", map[string]string{EnvAddr: ":70000"}, EnvAddr},
+		{"non-numeric port", map[string]string{EnvAddr: ":http"}, EnvAddr},
+		{"unparseable scan interval", map[string]string{EnvScanInterval: "soon"}, EnvScanInterval},
+		{"scan interval with no unit", map[string]string{EnvScanInterval: "60"}, EnvScanInterval},
+		{"zero scan interval", map[string]string{EnvScanInterval: "0s"}, EnvScanInterval},
+		{"negative scan interval", map[string]string{EnvScanInterval: "-5m"}, EnvScanInterval},
+		{"hostname as a URL", map[string]string{EnvHostname: "https://drive.example.com"}, EnvHostname},
+		{"hostname with a port", map[string]string{EnvHostname: "drive.example.com:443"}, EnvHostname},
+		{"hostname with a path", map[string]string{EnvHostname: "drive.example.com/files"}, EnvHostname},
+		{"acme directory without a scheme", map[string]string{EnvACMEDirectory: "acme.example.com/dir"}, EnvACMEDirectory},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			emptyEnv(t)
-			t.Setenv(EnvDataDir, tc.dataDir)
-			t.Setenv(EnvAddr, tc.addr)
-			t.Setenv(EnvScanInterval, tc.interval)
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
 
 			_, err := Load()
 			var invalid *InvalidError

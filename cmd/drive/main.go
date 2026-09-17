@@ -21,6 +21,7 @@ import (
 	"github.com/fosslife/drive/internal/index"
 	"github.com/fosslife/drive/internal/scan"
 	"github.com/fosslife/drive/internal/server"
+	"github.com/fosslife/drive/internal/transport"
 )
 
 // Version is overridden at build time with -ldflags "-X main.Version=v1.2.3".
@@ -58,13 +59,14 @@ func run() error {
 			"moved_to", movedTo)
 	}
 
-	listener, err := net.Listen("tcp", cfg.Addr)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	listener, encrypted, err := transport.Listen(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("listening on %s: %w", cfg.Addr, err)
+		return err
 	}
 
-	// TODO(14.x): HTTPS by default via CertMagic, self-signed fallback.
-	encrypted := false
 	slog.Info("drive started",
 		"version", Version,
 		"address", listener.Addr().String(),
@@ -97,9 +99,6 @@ func run() error {
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	// Reconciliation runs alongside serving, never before it. A first scan of a
 	// large root takes minutes and must not delay the port opening.

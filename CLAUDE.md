@@ -39,8 +39,17 @@ npm --prefix web run test:e2e                       # real binary + real Chrome,
 Without that build the binary still serves the whole API and answers `/` with a note saying so;
 `web.Built()` is the check, and the Go UI tests skip rather than pass quietly.
 
-Podman is available; there is no Docker. `Containerfile` and `compose.yml` land with task 14.4.
-`strace` is not installed on this machine — task 15.2 needs it.
+Podman is available; there is no Docker. Building the image and running it is an acceptance test,
+kept out of the default run because it costs minutes and a network:
+
+```sh
+DRIVE_CONTAINER_TEST=1 go test ./cmd/drive -run Container   # podman build + run + reach it
+scripts/release.sh                                          # dist/drive-linux-{amd64,arm64}
+scripts/backup.sh backup <data-dir> <backup-dir>            # docs/backup.md
+```
+
+`strace` is not installed on this machine — task 15.2 needs it. Neither is `qemu-user-static`, so the
+arm64 release artifact is checked by reading its ELF header and skips the part that runs it.
 
 ## Layout
 
@@ -54,18 +63,23 @@ internal/auth/      accounts, Argon2id passwords, scs sessions, API tokens, fail
 internal/files/     browse, create, rename, move, trash: index reads, filesystem writes
 internal/share/     public links: create, resolve, confine to one subtree
 internal/thumb/     thumbnails: decode, orient, scale, cache as derived data
+internal/transport/ the listener: plaintext, or ACME HTTPS when a hostname is configured
 internal/server/    HTTP surface
 web/                React + Vite interface, its dist/, and the embed.FS that compiles it in
+scripts/            release.sh (cross-compile), backup.sh (the procedure in docs/backup.md)
 ```
 
 Environment: `DRIVE_DATA_DIR`, `DRIVE_ADDR`, `DRIVE_MIN_FREE_BYTES` (plain byte count, default 1 GiB),
 `DRIVE_SCAN_INTERVAL` (Go duration, default 15m), `DRIVE_UPLOAD_RETENTION` (Go duration, default 24h),
-`DRIVE_TRASH_RETENTION` (Go duration, default 720h; `0` means never expire).
+`DRIVE_TRASH_RETENTION` (Go duration, default 720h; `0` means never expire),
+`DRIVE_HOSTNAME` (public name; set it and the default address becomes `:443` and certificates become
+automatic), `DRIVE_ACME_EMAIL`, `DRIVE_ACME_DIRECTORY` (default Let's Encrypt).
 
 Data directory (default `$XDG_DATA_HOME/drive`, else `~/.local/share/drive`, else `/var/lib/drive`):
 
 ```
 index.db                  file metadata is rebuildable by scanning; accounts are not
+certs/acme/               CertMagic's storage; only exists when DRIVE_HOSTNAME is set
 users/<username>/         storage root, user files at their real paths
   .drive/{tmp,trash,thumbs}
 ```
@@ -90,6 +104,9 @@ users/<username>/         storage root, user files at their real paths
   a test enumerates the slice against a hardcoded list. Making a route public is a reviewed decision.
 - **Stored files are served as attachments** with `nosniff` and a restrictive CSP. Inline only for inert raster images — never SVG, never PDF.
 - **Every config value has a working default.** No config file, ever. Env overrides only, `DRIVE_*`.
+- **`DRIVE_HOSTNAME` is the only switch for HTTPS.** Set, the drive gets a real certificate by ACME and
+  renews it. Unset, it serves plaintext and generates nothing — it never signs a certificate for itself,
+  because a browser warning on first run is not security. Plaintext off loopback warns at every start.
 - **Single binary, single process.** No second service, no second database engine, no Node runtime, no cgo
   (hence `modernc.org/sqlite`).
 

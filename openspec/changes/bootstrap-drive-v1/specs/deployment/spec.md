@@ -70,11 +70,13 @@ On first start the system SHALL have no usable account. It SHALL create the firs
 - **WHEN** the system is restarted before the first administrator is created
 - **THEN** setup is still available and a valid token is reported
 
-### Requirement: Encrypted transport by default
+### Requirement: Transport that matches the deployment
 
-The system SHALL serve over HTTPS without requiring the operator to configure a reverse proxy. Where a public hostname is configured, it SHALL obtain and renew a certificate automatically. Otherwise it SHALL generate a self-signed certificate and report its fingerprint so the operator can verify it.
+Where a public hostname is configured, the system SHALL obtain and renew a certificate for it automatically and serve HTTPS, without requiring the operator to configure a reverse proxy.
 
-Plaintext HTTP SHALL be used only when explicitly enabled by the operator, and the system SHALL warn when it is.
+Where no hostname is configured, the system SHALL serve plaintext HTTP and SHALL NOT generate a certificate of its own. A self-signed certificate is a browser warning rather than security: the deployments that have no public name are a proxy that terminates TLS, a private network address, or an operator trying the system out, and none of them are improved by one.
+
+The system SHALL warn, every start, when it serves plaintext on an address other than loopback, naming what is exposed and what to do about it.
 
 #### Scenario: Public hostname configured
 
@@ -85,13 +87,14 @@ Plaintext HTTP SHALL be used only when explicitly enabled by the operator, and t
 #### Scenario: No hostname configured
 
 - **WHEN** the system starts with no public hostname
-- **THEN** it serves HTTPS using a self-signed certificate
-- **AND** prints the certificate fingerprint
+- **THEN** it serves plaintext HTTP and is immediately usable
+- **AND** no certificate is generated and no certificate warning is shown to the user
 
-#### Scenario: Plaintext explicitly enabled
+#### Scenario: Plaintext reachable from the network
 
-- **WHEN** the operator explicitly enables plaintext HTTP
-- **THEN** the system serves over HTTP and logs a warning that traffic is unencrypted
+- **WHEN** the system serves plaintext on an address other than loopback
+- **THEN** it logs a warning that passwords, files, and session cookies are readable on that network
+- **AND** the warning names both remedies: a proxy that terminates TLS, or configuring a hostname
 
 ### Requirement: Automatic schema migrations
 

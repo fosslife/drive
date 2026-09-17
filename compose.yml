@@ -1,0 +1,23 @@
+# podman compose up -d   (or docker compose; the file is the same)
+#
+# One service, one volume, one port. If a second service ever appears here,
+# something has gone wrong with the architecture rather than with this file.
+services:
+  drive:
+    build: .
+    image: localhost/drive:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      # Nothing is required. As it stands this serves plaintext on 8080, which
+      # is what you want behind a proxy that terminates TLS, or on a Tailscale
+      # address, or while trying the thing out.
+      #
+      # Facing the public internet directly instead? Name it, and certificates
+      # become automatic — then publish 443:443 rather than 8080:8080.
+      #   DRIVE_HOSTNAME: drive.example.com
+      #   DRIVE_ACME_EMAIL: you@example.com
+      DRIVE_TRASH_RETENTION: 720h
+    restart: unless-stopped

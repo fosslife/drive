@@ -190,6 +190,36 @@ how it got here is worse than no record.
   allowlist already does exactly this, so there is no second endpoint. Thumbnails are served
   `inline` because they are our own re-encoded pixels, not stored bytes.
 
+## Transport and distribution
+
+- `DRIVE_HOSTNAME` is the switch for everything about certificates: set it and CertMagic gets one
+  from `DRIVE_ACME_DIRECTORY`, unset it and the drive serves plaintext. There is no "enable HTTPS"
+  setting because a public name is the only thing ACME needs to know, and no self-signed fallback
+  because that ships a browser warning to somebody who is still deciding whether to trust us with
+  their files. The deployments without a public name — behind Caddy, on Tailscale, on a laptop for
+  ten minutes — all have a better answer than a certificate we signed for ourselves.
+- Plaintext on anything but loopback warns at every start, naming what is readable and both ways
+  out. The bind address is the signal: `127.0.0.1:8080` is someone trying the drive out and needs
+  no lecture, `:8080` is a network that can read session cookies.
+- Setting a hostname also moves the default address to `:443`. A certificate for a public name is
+  only useful on the port the public connects to, and `DRIVE_ADDR` still overrides it.
+- Obtaining the certificate blocks startup. An instance that cannot get a certificate for the name
+  it was told to serve should say so in the log rather than answer every handshake with an error.
+- CertMagic's own zap logger is left alone. Routing it into `slog` costs a second logging dependency
+  to make ACME errors match the house format, and they are already legible.
+- The ACME test runs Pebble, Let's Encrypt's test CA, inside the test process: account, order,
+  HTTP-01 challenge, CSR and issuance are all real, against a root nobody trusts. Staging Let's
+  Encrypt cannot validate a machine with no public name, so it would have been a skipped test
+  everywhere. `acmeTrustedRoots` and `acmeHTTPPort` in `internal/transport` exist for it — two
+  unexported variables rather than two configuration values nobody should set.
+- The image is `scratch` plus the binary and the CA roots. The roots are the one thing the binary
+  cannot carry: without them `DRIVE_HOSTNAME` cannot verify Let's Encrypt. No user is declared, so
+  rootless Podman maps the container's root to the invoking user and the mounted data directory is
+  writable without a chown.
+- `scripts/backup.sh` uses `rsync` and `sqlite3 .backup`, and says plainly when `sqlite3` is missing
+  that the drive should be stopped first. The interesting part of the procedure is not the copying,
+  it is that the index holds the accounts and nothing else does — `docs/backup.md` leads with that.
+
 ## Frontend
 
 - `web/` is one directory holding the Vite project, its build output, and the `embed.go` that

@@ -122,9 +122,15 @@ This is not a nice-to-have. Without it, getting a folder out of the drive means 
 
 Zip rather than tar, for native extraction on Windows and macOS. Stored rather than deflated: the payload is usually already-compressed media, so compression would burn CPU for nothing and prevent the response from streaming.
 
-### HTTPS: CertMagic
+### HTTPS: CertMagic when there is a name, plaintext when there is not
 
-Automatic ACME issuance and renewal, plus self-signed fallback, from the library that backs Caddy. Writing an ACME client is not a thing to do by hand.
+A configured hostname turns on automatic ACME issuance and renewal via CertMagic, the library that backs Caddy. Writing an ACME client is not a thing to do by hand.
+
+With no hostname the drive serves plaintext and generates nothing. This reverses the original decision, which had a self-signed fallback, and the reason is the audience: self-hosting in 2026 means Tailscale on the private side and Caddy or Traefik on the public side, both of which solve this better. What a self-signed certificate actually produces is a full-page browser warning on first run — "what certificate, issued by whom, when did I agree to this" — for someone who is still deciding whether to trust the software with their files. That is a worse first five minutes than plaintext on `localhost:8080`, and it is the failure mode that makes people close the tab.
+
+Plaintext off loopback is not silent: it warns at every start, naming what is exposed and both ways out. The operator gets to decide, informed, instead of being protected by a certificate nobody can verify.
+
+*Alternative considered:* self-signed behind an explicit opt-in. Rejected as a setting with no plausible user — anyone who wants encryption without a public name already has Tailscale or a proxy.
 
 ### Auth primitives
 
