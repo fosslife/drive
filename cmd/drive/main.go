@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fosslife/drive/internal/auth"
 	"github.com/fosslife/drive/internal/config"
 	"github.com/fosslife/drive/internal/index"
 	"github.com/fosslife/drive/internal/scan"
@@ -72,7 +73,11 @@ func run() error {
 	)
 
 	scanner := scan.NewScanner(db, cfg.DataDir, cfg.ScanInterval)
-	s := server.New(scanner.Status)
+	users := auth.NewStore(db, cfg.DataDir, cfg.MinFree)
+	// Secure cookies follow the listener: set unconditionally they would not be
+	// sent at all over the plaintext listener, which is every login failing.
+	sessions := auth.NewSessions(db, encrypted)
+	s := server.New(users, sessions, scanner.Status)
 	s.SetReady(true)
 	httpSrv := &http.Server{
 		Handler:           s.Handler(),

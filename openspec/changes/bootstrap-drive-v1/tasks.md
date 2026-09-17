@@ -35,15 +35,15 @@
 
 ## 5. Authentication
 
-- [ ] 5.1 Implement user accounts with isolated storage roots named `users/<username>` and restricted to `[a-z0-9._-]`, with administrator management of create, disable, and delete; verify a test asserts deleting one account leaves another account's files intact, that an unsafe username is refused, and that re-creating an account with an existing username reattaches it to that storage root
-- [ ] 5.2 Implement Argon2id password hashing and login with responses that do not reveal whether an account exists; verify a test asserts identical responses for unknown user and wrong password, and that no plaintext password appears in the index
-- [ ] 5.3 Rate-limit failed authentication attempts per account and per source; verify a test asserts attempts are refused or delayed after a threshold
-- [ ] 5.4 Implement server-side sessions using `alexedwards/scs`, delivered in an `HttpOnly; Secure; SameSite=Lax` cookie carrying only an opaque identifier, with expiry and logout revocation; verify a test asserts the cookie attributes, that it carries no identity or privileges, and that a session cannot authenticate after logout
-- [ ] 5.5 Renew the session identifier on login and on any privilege change via `RenewToken()`; verify a test asserts a pre-authentication identifier differs from the post-login one and no longer authenticates as that user
-- [ ] 5.6 Reject state-changing requests that carry a valid session cookie without proof of same-origin submission, by validating `Origin` and `Sec-Fetch-Site`; verify a test asserts a forged cross-site request is refused before any file is read or written
-- [ ] 5.7 Implement API tokens with create, list, and individual revoke, storing only a hash and looking tokens up by that hash so verification is an indexed equality test; verify a test asserts the secret is absent from the list response and that a revoked token stops authenticating
-- [ ] 5.8 Enforce that a token never exceeds its owner's access; verify a test asserts a token request for a path outside its owner's root is rejected
-- [ ] 5.9 Enforce authentication on all endpoints except share access and first-run setup; verify a test enumerates registered routes and asserts each is either authenticated or on the explicit public list
+- [x] 5.1 Implement user accounts with isolated storage roots named `users/<username>` and restricted to `[a-z0-9._-]`, with administrator management of create, disable, and delete; verify a test asserts deleting one account leaves another account's files intact, that an unsafe username is refused, and that re-creating an account with an existing username reattaches it to that storage root
+- [x] 5.2 Implement Argon2id password hashing and login with responses that do not reveal whether an account exists; verify a test asserts identical responses for unknown user and wrong password, and that no plaintext password appears in the index
+- [x] 5.3 Rate-limit failed authentication attempts per account and per source; verify a test asserts attempts are refused or delayed after a threshold
+- [x] 5.4 Implement server-side sessions using `alexedwards/scs`, delivered in an `HttpOnly; Secure; SameSite=Lax` cookie carrying only an opaque identifier, with expiry and logout revocation; verify a test asserts the cookie attributes, that it carries no identity or privileges, and that a session cannot authenticate after logout
+- [x] 5.5 Renew the session identifier on login and on any privilege change via `RenewToken()`; verify a test asserts a pre-authentication identifier differs from the post-login one and no longer authenticates as that user
+- [x] 5.6 Reject state-changing requests that carry a valid session cookie without proof of same-origin submission, by validating `Origin` and `Sec-Fetch-Site`; verify a test asserts a forged cross-site request is refused before any file is read or written
+- [x] 5.7 Implement API tokens with create, list, and individual revoke, storing only a hash and looking tokens up by that hash so verification is an indexed equality test; verify a test asserts the secret is absent from the list response and that a revoked token stops authenticating
+- [x] 5.8 Enforce that a token never exceeds its owner's access; verify a test asserts a token request for a path outside its owner's root is rejected
+- [x] 5.9 Enforce authentication on all endpoints except share access and first-run setup; verify a test enumerates registered routes and asserts each is either authenticated or on the explicit public list
 
 ## 6. First-run setup
 

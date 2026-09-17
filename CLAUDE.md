@@ -33,6 +33,7 @@ internal/config/    env-only configuration, every value defaulted
 internal/index/     SQLite open + forward-only migrations + schema
 internal/storage/   one Root per user: atomic writes, checksums, integrity, space guard, Walk
 internal/scan/      the reconciler: filesystem → index, add/update/mark-missing only
+internal/auth/      accounts, Argon2id passwords, scs sessions, API tokens, failed-login limiter
 internal/server/    HTTP surface
 ```
 
@@ -89,9 +90,31 @@ users/<username>/         storage root, user files at their real paths
   directory moves between a host and a container, the roots inside it do not.
 - The scanner is one goroutine started with `go scanner.Run(ctx)` after the listener is open. One root
   failing is logged and skipped, not fatal: an unmounted disk for one account must not stall the others.
-- `GET /api/scan` reports scan progress and `indexing`. **Unauthenticated today like `/healthz`** — task
-  5.9 must move it behind authentication rather than onto the public list. There is deliberately no HTTP
-  route that triggers a scan yet; `Scanner.Trigger()` is the on-demand entry point until auth exists.
+- `GET /api/scan` reports scan progress and `indexing`, authenticated. There is deliberately no HTTP
+  route that triggers a scan; `Scanner.Trigger()` is the on-demand entry point.
+- Routes are a `[]route` in `server.routes()` with a `public` flag, and `Handler()` wraps every
+  non-public one in `requireAuth`. **Adding a route unauthenticated takes a deliberate `true`**, and a
+  test enumerates the slice against a hardcoded public list. Public today: `/healthz` and `POST
+  /api/login`; first-run setup (6.x) and share access (11.x) join it.
+- One `requireAuth` resolves either credential. A bearer token authenticates *as* its owner with no
+  scope of its own, so "a token never exceeds its owner's access" is a property of `Store.Root`, not a
+  check anyone can forget. There is no path-taking endpoint yet, so 5.8 is tested at that seam.
+- CSRF: `sameOrigin` runs outside authentication and refuses any unsafe method that shows neither
+  `Sec-Fetch-Site: same-origin|none` nor an `Origin` matching `Host`. **A bearer token is exempt** —
+  browsers never attach one, and requiring an `Origin` from curl would break every API client.
+- Argon2id at OWASP's low-memory setting (m=19 MiB, t=2, p=1); parameters live in the PHC string so
+  raising them later leaves stored hashes verifiable. API token secrets are 256 random bits hashed with
+  plain SHA-256 — there is nothing to brute-force, and Argon2id per API request would be absurd.
+- A failed login costs one Argon2id verification even for an unknown username (`equaliseTiming`), or the
+  response time answers "does this account exist?" whatever the body says.
+- The failed-login limiter is in-memory, keyed `user:<name>` and `ip:<addr>`, 5 failures per 15 minutes.
+  `clientIP` reads `RemoteAddr` only; **no `X-Forwarded-For`** until there is a trusted-proxy setting.
+- Session cookie `Secure` follows whether the listener is encrypted. Hardcoding `true` would mean no
+  browser ever sends it over the plaintext listener, i.e. every login silently failing.
+- `Store.Delete` removes the account row (files, tokens, shares cascade) and **never touches the storage
+  root**. The directory left behind is what makes re-creating the username a recovery.
+- `auth.ErrNotFound` is the one "no such row" for accounts and tokens alike. Every authenticated request
+  re-reads the account (`Store.Active`), so disable and delete land on the next request, not next login.
 - `strace` is not installed on this machine — task 15.2 needs it.
 
 ## Style
