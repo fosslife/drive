@@ -24,11 +24,11 @@
 
 ## 4. Reconciler
 
-- [ ] 4.1 Implement a storage-root scan with a `(size, mtime)` fast path that rehashes only changed files and skips `.drive`; verify a test asserts unchanged files are not rehashed on a second scan
-- [ ] 4.2 Index externally added files so they become browsable with correct name, size, mtime, and checksum; verify a test copies 500 files in directly, scans, and asserts all 500 are indexed
-- [ ] 4.3 Mark vanished files as missing and ensure the reconciler has no delete path at all; verify a test removes a file on disk, scans, and asserts the row is marked missing and no other file was deleted or modified
-- [ ] 4.4 Abort a scan whole and report the error when a storage root is unreadable, leaving the index unchanged; verify a test makes a root unreadable and asserts zero index writes
-- [ ] 4.5 Detect external moves by unique `(checksum, size)` match between a file that vanished and one that appeared in the same scan, preserving identity, falling back to a new identity when ambiguous; verify a test moves a file externally and asserts the identifier is preserved, plus a second test with byte-identical duplicates asserts a new identity rather than a wrong match
+- [x] 4.1 Implement a storage-root scan with a `(size, mtime)` fast path that rehashes only changed files and skips `.drive`; verify a test asserts unchanged files are not rehashed on a second scan
+- [x] 4.2 Index externally added files so they become browsable with correct name, size, mtime, and checksum; verify a test copies 500 files in directly, scans, and asserts all 500 are indexed
+- [x] 4.3 Mark vanished files as missing and ensure the reconciler has no delete path at all; verify a test removes a file on disk, scans, and asserts the row is marked missing and no other file was deleted or modified
+- [x] 4.4 Abort a scan whole and report the error when a storage root is unreadable, leaving the index unchanged; verify a test makes a root unreadable and asserts zero index writes
+- [x] 4.5 Detect external moves by unique `(checksum, size)` match between a file that vanished and one that appeared in the same scan, preserving identity, falling back to a new identity when ambiguous; verify a test moves a file externally and asserts the identifier is preserved, plus a second test with byte-identical duplicates asserts a new identity rather than a wrong match
 - [ ] 4.6 Rebuild the entire index from the filesystem when it is missing or unreadable at startup; verify a test deletes the index, restarts, and asserts all files are browsable with correct paths
 - [ ] 4.7 Run the scan at startup, periodically, and on demand; verify an on-demand trigger picks up a file added seconds earlier
 - [ ] 4.8 Run scans in the background so they never block startup or request serving, exposing scan state and progress; verify a test asserts requests are served throughout a rebuild of a large root and that responses indicate indexing is incomplete

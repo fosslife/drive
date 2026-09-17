@@ -336,3 +336,74 @@ func assertTempEmpty(t *testing.T, r *Root) {
 		t.Errorf("%d temp files left behind, want none", len(entries))
 	}
 }
+
+// 4.1: Walk is what the reconciler sees. It must not offer it .drive, and it
+// must not offer it a symlink, which has no bytes of its own and could point
+// anywhere.
+func TestWalkSkipsInternalAndNonRegularEntries(t *testing.T) {
+	r := testRoot(t)
+	write(t, r, "notes.txt", "hello")
+	// Write does not create parent directories; folder creation lands in 7.4.
+	if err := os.Mkdir(filepath.Join(r.Dir(), "docs"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write(t, r, "docs/taxes.pdf", "money")
+
+	outside := filepath.Join(filepath.Dir(r.Dir()), "secret.txt")
+	if err := os.WriteFile(outside, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(r.Dir(), "escape.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("notes.txt", filepath.Join(r.Dir(), "inside-link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	seen := map[string]int64{}
+	if err := r.Walk(func(e Entry) error {
+		if e.IsDir {
+			seen[e.Path] = -1
+			return nil
+		}
+		seen[e.Path] = e.Size
+		return nil
+	}); err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+
+	want := map[string]int64{"notes.txt": 5, "docs": -1, "docs/taxes.pdf": 5}
+	if len(seen) != len(want) {
+		t.Fatalf("Walk saw %v, want %v", seen, want)
+	}
+	for path, size := range want {
+		if seen[path] != size {
+			t.Errorf("Walk saw %s as %d, want %d", path, seen[path], size)
+		}
+	}
+}
+
+// 4.4: a directory that cannot be read is an error, never an empty result.
+func TestWalkFailsOnAnUnreadableDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission bits do not make a directory unreadable")
+	}
+	r := testRoot(t)
+	locked := filepath.Join(r.Dir(), "locked")
+	if err := os.Mkdir(locked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write(t, r, "locked/a.txt", "x")
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(locked, 0o700) })
+
+	err := r.Walk(func(Entry) error { return nil })
+	if err == nil {
+		t.Fatal("Walk succeeded over an unreadable directory, want an error")
+	}
+	if !strings.Contains(err.Error(), "locked") {
+		t.Errorf("error %q does not name the unreadable directory", err)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"syscall"
@@ -115,6 +116,43 @@ func (r *Root) Write(rel string, src io.Reader, size int64) (Info, error) {
 		info.ModTime = st.ModTime()
 	}
 	return info, nil
+}
+
+// Entry is one filesystem entry under a root, at a path relative to it.
+type Entry struct {
+	Path    string
+	IsDir   bool
+	Size    int64
+	ModTime time.Time
+}
+
+// Walk visits every directory and regular file under the root, skipping
+// .drive and anything that is neither — symlinks, sockets, devices — since
+// those own no bytes we can serve and a symlink is a path we refuse to follow.
+//
+// A directory that cannot be read aborts the walk with an error. Callers must
+// treat that as a failed scan and not as an empty root: concluding "everything
+// is gone" from a read error is how sync products delete people's files.
+func (r *Root) Walk(fn func(Entry) error) error {
+	return fs.WalkDir(r.root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", p, err)
+		}
+		if p == "." {
+			return nil
+		}
+		if p == Internal {
+			return fs.SkipDir
+		}
+		if !d.IsDir() && !d.Type().IsRegular() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", p, err)
+		}
+		return fn(Entry{Path: p, IsDir: d.IsDir(), Size: info.Size(), ModTime: info.ModTime()})
+	})
 }
 
 // Checksum hashes a file's current contents without modifying it. Used when a

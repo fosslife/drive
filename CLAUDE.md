@@ -31,7 +31,8 @@ Podman is available; there is no Docker. `Containerfile` and `compose.yml` land 
 cmd/drive/          entrypoint, startup, graceful shutdown
 internal/config/    env-only configuration, every value defaulted
 internal/index/     SQLite open + forward-only migrations + schema
-internal/storage/   one Root per user: atomic writes, checksums, integrity, space guard
+internal/storage/   one Root per user: atomic writes, checksums, integrity, space guard, Walk
+internal/scan/      the reconciler: filesystem → index, add/update/mark-missing only
 internal/server/    HTTP surface
 ```
 
@@ -71,6 +72,15 @@ users/<user-id>/          storage root, user files at their real paths
   top for early, legible errors. **Never build a real path string and open it directly.**
 - `Write` renames over whatever is at the destination, symlink included, and never follows it.
 - `storage.Verify` takes the expected checksums as a map; the index feeds it (group 4 wires this up).
+- `dir` is `""` for a top-level entry, not `"."`. `scan.split`/`scan.join` are the only place that knows it.
+- `mtime` is stored in Unix **seconds**. The scan fast path is `(kind, size, mtime)`; a rewrite to the same
+  size within the same second is not rehashed, and `storage.Verify` is the backstop for that.
+- The scan walks read-only first and writes afterwards in batches of 500, so a walk that fails partway
+  writes nothing at all and a long rebuild becomes browsable as it goes.
+- `storage.Write` does not create parent directories (that is task 7.4), so tests that need one `os.Mkdir` it.
+- **Accounts do not survive index loss yet.** `users` lives only in the index, so task 4.6's "delete the
+  index and restart" leaves the files on disk but nobody to own them. Needs a per-root account record
+  (`users/<id>/.drive/user.json`) written by 5.1 and adopted at startup — decide before 4.6 or 5.1.
 - `strace` is not installed on this machine — task 15.2 needs it.
 
 ## Style
