@@ -82,8 +82,8 @@
 
 ## 10. Search
 
-- [ ] 10.1 Implement case-insensitive partial filename search scoped to the requesting user, excluding trashed items, returning full paths; verify tests assert `tax` matches `taxes.pdf`, that another user's files never appear, and that trashed items are excluded
-- [ ] 10.2 Bound search results to a page and indicate when more exist; verify a test with more matches than the page size asserts the result count is capped and the response signals truncation
+- [x] 10.1 Implement case-insensitive partial filename search scoped to the requesting user, excluding trashed items, returning full paths; verify tests assert `tax` matches `taxes.pdf`, that another user's files never appear, and that trashed items are excluded
+- [x] 10.2 Bound search results to a page and indicate when more exist; verify a test with more matches than the page size asserts the result count is capped and the response signals truncation
 
 ## 11. Sharing
 

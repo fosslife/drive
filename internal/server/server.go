@@ -63,6 +63,7 @@ func (s *Server) routes() []route {
 		{"GET /api/scan", false, s.scan},
 
 		{"GET /api/list", false, s.list},
+		{"GET /api/search", false, s.search},
 		{"GET /api/download/{path...}", false, s.download},
 		{"GET /api/archive", false, s.archive},
 		{"POST /api/folders", false, s.createFolder},

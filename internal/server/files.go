@@ -58,6 +58,28 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	}{q.Get("path"), entries, next, s.scanStatus().Indexing()})
 }
 
+// search matches on filename across the user's whole root. Like a listing it
+// reports whether the index is still being rebuilt: a short result set during a
+// scan means "not indexed yet", not "you do not have that file".
+func (s *Server) search(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	entries, more, err := files.Search(s.db, userFrom(r.Context()).ID, q.Get("q"), limit)
+	if err != nil {
+		fileError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Query   string        `json:"query"`
+		Entries []files.Entry `json:"entries"`
+		// Truncated says there were more matches than fit. The client narrows
+		// the term rather than paging: a filename search that needs page two is
+		// a search that needs a better word.
+		Truncated bool `json:"truncated"`
+		Indexing  bool `json:"indexing"`
+	}{q.Get("q"), entries, more, s.scanStatus().Indexing()})
+}
+
 func (s *Server) createFolder(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Path string `json:"path"`

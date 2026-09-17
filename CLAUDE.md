@@ -177,6 +177,9 @@ users/<username>/         storage root, user files at their real paths
 - `DRIVE_TRASH_RETENTION` defaults to 30 days; `0` is never-expire, the one setting where zero means
   "do nothing" rather than "do it immediately". `files.ExpireTrash` runs on its own ticker in `main`,
   next to the upload sweep and nowhere near the reconciler.
+- Search escapes `%`, `_` and `\` in the term and passes `ESCAPE '\'`: unescaped, searching `%` returns
+  every file a user has. It signals `truncated` from asking for `limit+1` rows rather than paging —
+  a filename search that needs page two needs a better word, not a cursor.
 - Memory-ceiling tests assert on `MemStats.TotalAlloc`, never `HeapAlloc`: total allocation is monotonic,
   so it does not depend on when the collector happened to run. `HeapAlloc` flaked under `-race`.
 - `strace` is not installed on this machine — task 15.2 needs it.
