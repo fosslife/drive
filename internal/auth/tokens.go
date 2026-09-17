@@ -33,11 +33,10 @@ func (s *Store) CreateToken(userID int64, name string) (secret string, t Token, 
 	if name == "" {
 		return "", Token{}, errors.New("token name must not be empty")
 	}
-	b := make([]byte, tokenBytes)
-	if _, err := rand.Read(b); err != nil {
-		return "", Token{}, fmt.Errorf("generating token: %w", err)
+	secret, err = newSecret()
+	if err != nil {
+		return "", Token{}, err
 	}
-	secret = base64.RawURLEncoding.EncodeToString(b)
 
 	created := time.Now()
 	res, err := s.db.Exec(`INSERT INTO api_tokens (user_id, name, token_hash, created_at) VALUES (?, ?, ?, ?)`,
@@ -107,6 +106,16 @@ func (s *Store) AuthenticateToken(secret string) (*User, error) {
 	// column could not be written.
 	s.db.Exec(`UPDATE api_tokens SET last_used_at = ? WHERE id = ?`, time.Now().Unix(), id)
 	return &u, nil
+}
+
+// newSecret is the shape every opaque secret here takes: 256 random bits in a
+// form that survives a URL and a copy-paste out of a terminal.
+func newSecret() (string, error) {
+	b := make([]byte, tokenBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating a secret: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // hashToken is a plain SHA-256: the secret is 256 random bits, so there is

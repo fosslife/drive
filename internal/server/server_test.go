@@ -239,9 +239,11 @@ func TestEveryRouteIsAuthenticatedOrExplicitlyPublic(t *testing.T) {
 	public := map[string]bool{
 		"GET /healthz":    true, // readiness, and it discloses nothing
 		"POST /api/login": true, // the thing that produces credentials
+		"GET /api/setup":  true, // first run: the printed token is the credential
+		"POST /api/setup": true,
 	}
-	// Share access (group 11) and first-run setup (group 6) join this list when
-	// they land, and a new entry here is the moment to ask why.
+	// Share access (group 11) joins this list when it lands, and a new entry
+	// here is the moment to ask why.
 
 	h := newHarness(t)
 	placeholder := regexp.MustCompile(`\{[^}]*\}`)

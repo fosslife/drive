@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -74,6 +75,18 @@ func run() error {
 
 	scanner := scan.NewScanner(db, cfg.DataDir, cfg.ScanInterval)
 	users := auth.NewStore(db, cfg.DataDir, cfg.MinFree)
+
+	// No default credentials, ever. With no account the only way in is the
+	// one-time token printed here, and it stops working once setup completes.
+	setupToken, err := users.OpenSetup()
+	if err != nil {
+		return err
+	}
+	if setupToken != "" {
+		slog.Warn("no account exists yet: open this URL to create the first administrator",
+			"url", setupURL(listener.Addr(), encrypted, setupToken))
+	}
+
 	// Secure cookies follow the listener: set unconditionally they would not be
 	// sent at all over the plaintext listener, which is every login failing.
 	sessions := auth.NewSessions(db, encrypted)
@@ -104,4 +117,27 @@ func run() error {
 	}
 	slog.Info("drive stopped")
 	return nil
+}
+
+// setupURL is the address an operator can actually paste into a browser. A
+// wildcard listener answers on every address and so names none of them;
+// localhost is the one that always reaches it from the machine reading this log.
+func setupURL(addr net.Addr, encrypted bool, token string) string {
+	scheme := "http"
+	if encrypted {
+		scheme = "https"
+	}
+	host, port, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		host, port = addr.String(), ""
+	}
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		host = "localhost"
+	}
+	if port != "" {
+		host = net.JoinHostPort(host, port)
+	}
+	u := url.URL{Scheme: scheme, Host: host, Path: "/setup"}
+	u.RawQuery = url.Values{"token": {token}}.Encode()
+	return u.String()
 }

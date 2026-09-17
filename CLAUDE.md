@@ -94,8 +94,15 @@ users/<username>/         storage root, user files at their real paths
   route that triggers a scan; `Scanner.Trigger()` is the on-demand entry point.
 - Routes are a `[]route` in `server.routes()` with a `public` flag, and `Handler()` wraps every
   non-public one in `requireAuth`. **Adding a route unauthenticated takes a deliberate `true`**, and a
-  test enumerates the slice against a hardcoded public list. Public today: `/healthz` and `POST
-  /api/login`; first-run setup (6.x) and share access (11.x) join it.
+  test enumerates the slice against a hardcoded public list. Public today: `/healthz`, `POST
+  /api/login`, and `GET|POST /api/setup`; share access (11.x) joins it.
+- First-run setup keeps only the token's **hash** in `settings`, and `OpenSetup()` mints a **fresh token
+  on every start** while no account exists. A restart therefore invalidates the previously printed URL —
+  deliberate, so the live token is always the one in the newest output and nothing is stored in the
+  clear. `CompleteSetup` consumes it with a conditional `DELETE ... WHERE key = ? AND value = ?`, which
+  is the whole concurrency control, and puts it back if account creation fails so a typo is not a lockout.
+- `main.setupURL` prints `http://localhost:<port>/setup?token=…` for a wildcard listener: a wildcard
+  answers on every address and so names none. `/setup` is a frontend route that lands with task 13.2.
 - One `requireAuth` resolves either credential. A bearer token authenticates *as* its owner with no
   scope of its own, so "a token never exceeds its owner's access" is a property of `Store.Root`, not a
   check anyone can forget. There is no path-taking endpoint yet, so 5.8 is tested at that seam.

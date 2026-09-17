@@ -162,6 +162,43 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, u)
 }
 
+// setupOpen tells the setup page whether it may render a form. It takes the
+// token from the query, which is where the printed URL puts it, and consumes
+// nothing: opening the page must not burn the token.
+func (s *Server) setupOpen(w http.ResponseWriter, r *http.Request) {
+	if err := s.users.CheckSetupToken(r.URL.Query().Get("token")); err != nil {
+		writeError(w, http.StatusForbidden, auth.ErrSetupUnavailable.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"open": true})
+}
+
+// completeSetup creates the first administrator and closes the flow for good.
+func (s *Server) completeSetup(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		credentials
+		Token string `json:"token"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	u, err := s.users.CompleteSetup(in.Token, in.Username, in.Password)
+	switch {
+	case errors.Is(err, auth.ErrSetupUnavailable):
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	case err != nil:
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Log the operator straight in: they just proved more than a password would.
+	if err := auth.Login(r.Context(), s.sessions, u); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not establish a session")
+		return
+	}
+	writeJSON(w, http.StatusCreated, u)
+}
+
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if err := auth.Logout(r.Context(), s.sessions); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not end the session")

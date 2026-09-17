@@ -47,9 +47,9 @@
 
 ## 6. First-run setup
 
-- [ ] 6.1 Generate a one-time setup token on first start when no account exists and print the setup URL to process output; verify a test asserts no credentials grant access before setup
-- [ ] 6.2 Implement the browser setup flow creating the first administrator, invalidating the token and closing the flow on completion; verify a test asserts the token and the setup route both stop working afterwards
-- [ ] 6.3 Refuse setup when the token is absent or wrong, and keep setup available with a valid token across restarts before completion; verify tests cover both cases
+- [x] 6.1 Generate a one-time setup token on first start when no account exists and print the setup URL to process output; verify a test asserts no credentials grant access before setup
+- [x] 6.2 Implement the browser setup flow creating the first administrator, invalidating the token and closing the flow on completion; verify a test asserts the token and the setup route both stop working afterwards
+- [x] 6.3 Refuse setup when the token is absent or wrong, and keep setup available with a valid token across restarts before completion; verify tests cover both cases
 
 ## 7. File operations
 

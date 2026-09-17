@@ -50,6 +50,10 @@ func (s *Server) routes() []route {
 	return []route{
 		{"GET /healthz", true, s.health},
 		{"POST /api/login", true, s.login},
+		// First-run setup is public because there is nothing to authenticate
+		// against yet; the printed one-time token is the credential.
+		{"GET /api/setup", true, s.setupOpen},
+		{"POST /api/setup", true, s.completeSetup},
 
 		{"POST /api/logout", false, s.logout},
 		{"GET /api/me", false, s.me},
