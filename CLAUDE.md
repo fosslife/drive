@@ -34,6 +34,7 @@ internal/index/     SQLite open + forward-only migrations + schema
 internal/storage/   one Root per user: atomic writes, checksums, integrity, space guard, Walk
 internal/scan/      the reconciler: filesystem → index, add/update/mark-missing only
 internal/auth/      accounts, Argon2id passwords, scs sessions, API tokens, failed-login limiter
+internal/files/     browse, create, rename, move, trash: index reads, filesystem writes
 internal/server/    HTTP surface
 ```
 
@@ -122,6 +123,28 @@ users/<username>/         storage root, user files at their real paths
   root**. The directory left behind is what makes re-creating the username a recovery.
 - `auth.ErrNotFound` is the one "no such row" for accounts and tokens alike. Every authenticated request
   re-reads the account (`Store.Active`), so disable and delete land on the next request, not next login.
+- **Listings read the index; anything that changes something writes the filesystem first.** That order is
+  not negotiable: if the process dies between the two, the reconciler agrees with the disk. A listing is
+  keyset-paginated on `name` (`?cursor=`), never `OFFSET`, so page 500 costs what page 1 does.
+- Schema v2 rebuilt `files_listing` as `(user_id, dir, state, name)`. Without `name` in the index SQLite
+  sorts the whole folder into a temp b-tree, which is the "first page loads the folder" failure 7.1 bans.
+- `index.SplitPath`/`index.JoinPath` are the only place that knows `dir` is `""` for a top-level entry.
+- ETag is `"<id>-<mtime>-<size>"`, not the checksum: a per-request rehash to tag a file precisely is not
+  worth it, and the same-size-same-second rewrite is what `storage.Verify` already exists to catch.
+  `If-Match` on a modifying request opts into a precondition; without it, last write wins.
+- `storage.Rename` **refuses an occupied destination**. Replacing is the caller's explicit decision and
+  goes through `files.Trash` first — trash is created here in group 7 because `replace: true` cannot be
+  correct without it; group 9 adds browsing, restore, and expiry on top of the same layout.
+- Subtree SQL uses `substr(dir, 1, ?)` with **rune counts, not byte counts** — SQLite's `substr` on TEXT
+  counts characters, so a byte offset loses the subtree of any non-ASCII folder name.
+- Serving content: extension **allowlist** (`.jpg .jpeg .png .gif .webp`) gets its real type and
+  `inline`; everything else gets `application/octet-stream` and `attachment`, plus `nosniff` and
+  `default-src 'none'; sandbox` on every response. The dangerous set is open-ended (SVG carries script,
+  PDF carries script, the next one is not invented yet), so the narrow list is the only safe direction.
+  `?download` forces an attachment for an allowlisted type.
+- Archives are `zip.Store` written straight to the `ResponseWriter` — no temp file, no buffer, no
+  `Content-Length`. A failure partway abandons the stream unclosed: a truncated zip fails to open, which
+  beats a complete-looking archive quietly missing files.
 - `strace` is not installed on this machine — task 15.2 needs it.
 
 ## Style

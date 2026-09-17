@@ -23,6 +23,10 @@ import (
 // from filling. Reads, listings and deletes are unaffected by design.
 var ErrNoSpace = errors.New("insufficient free space")
 
+// ErrExists means the destination was occupied and the operation refused to
+// replace it. Replacing is a caller's explicit decision, and it goes via Trash.
+var ErrExists = errors.New("already exists")
+
 // Root is one user's storage root.
 type Root struct {
 	root    *os.Root
@@ -78,6 +82,12 @@ func (r *Root) Write(rel string, src io.Reader, size int64) (Info, error) {
 		return Info{}, err
 	}
 
+	if dir := path.Dir(name); dir != "." {
+		if err := r.root.MkdirAll(dir, 0o700); err != nil {
+			return Info{}, fmt.Errorf("creating %s: %w", dir, err)
+		}
+	}
+
 	tmp, f, err := r.createTemp()
 	if err != nil {
 		return Info{}, err
@@ -116,6 +126,103 @@ func (r *Root) Write(rel string, src io.Reader, size int64) (Info, error) {
 		info.ModTime = st.ModTime()
 	}
 	return info, nil
+}
+
+// Open opens a file for reading. The caller closes it. It is an *os.File so a
+// download can seek, which is what makes byte ranges free.
+func (r *Root) Open(rel string) (*os.File, error) {
+	name, err := relPath(rel)
+	if err != nil {
+		return nil, err
+	}
+	return r.root.Open(name)
+}
+
+// Stat describes what is at rel without following a symlink at the end of the
+// path: a link is not a file we own, and we never serve through one.
+func (r *Root) Stat(rel string) (os.FileInfo, error) {
+	name, err := relPath(rel)
+	if err != nil {
+		return nil, err
+	}
+	return r.root.Lstat(name)
+}
+
+// MkdirAll creates rel and any missing parents.
+func (r *Root) MkdirAll(rel string) error {
+	name, err := relPath(rel)
+	if err != nil {
+		return err
+	}
+	if err := r.root.MkdirAll(name, 0o700); err != nil {
+		return fmt.Errorf("creating %s: %w", rel, err)
+	}
+	return r.syncDir(path.Dir(name))
+}
+
+// Rename moves from to to, creating any missing parent of to.
+//
+// It refuses to replace anything already at to. A rename that clobbers destroys
+// bytes with no recovery, and only a permanent delete may do that: a caller
+// that means to replace moves the existing entry to Trash first.
+//
+// ponytail: the existence check is a separate syscall from the rename, so a
+// file created in between would still be clobbered. Linux has RENAME_NOREPLACE
+// for this; os.Root does not expose it. The window is one user racing
+// themselves, and the API-level rejection is what the spec asks for.
+func (r *Root) Rename(from, to string) error {
+	src, err := relPath(from)
+	if err != nil {
+		return err
+	}
+	dst, err := relPath(to)
+	if err != nil {
+		return err
+	}
+	switch _, err := r.root.Lstat(dst); {
+	case err == nil:
+		return fmt.Errorf("%w: %q", ErrExists, to)
+	case !errors.Is(err, fs.ErrNotExist):
+		return err
+	}
+	if dir := path.Dir(dst); dir != "." {
+		if err := r.root.MkdirAll(dir, 0o700); err != nil {
+			return fmt.Errorf("creating %s: %w", dir, err)
+		}
+	}
+	if err := r.root.Rename(src, dst); err != nil {
+		return fmt.Errorf("moving %s to %s: %w", from, to, err)
+	}
+	// Both ends: the entry left one directory and joined another, and neither
+	// change is durable until its directory is synced.
+	if err := r.syncDir(path.Dir(src)); err != nil {
+		return err
+	}
+	return r.syncDir(path.Dir(dst))
+}
+
+// Trash moves rel into .drive/trash/<id>/, which the reconciler skips and
+// listings exclude. The id namespaces it so two files deleted from different
+// folders with the same name do not collide; the original path stays in the
+// index as the restore target.
+//
+// This is a move, not a delete. Nothing here frees a byte.
+func (r *Root) Trash(id int64, rel string) error {
+	name, err := relPath(rel)
+	if err != nil {
+		return err
+	}
+	dir := fmt.Sprintf("%s/trash/%d", Internal, id)
+	if err := r.root.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("preparing trash for %s: %w", rel, err)
+	}
+	if err := r.root.Rename(name, dir+"/"+path.Base(name)); err != nil {
+		return fmt.Errorf("trashing %s: %w", rel, err)
+	}
+	if err := r.syncDir(path.Dir(name)); err != nil {
+		return err
+	}
+	return r.syncDir(dir)
 }
 
 // Entry is one filesystem entry under a root, at a path relative to it.

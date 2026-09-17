@@ -44,7 +44,7 @@ func newHarness(t *testing.T) *harness {
 
 	h := &harness{t: t, db: db, dataDir: dir, users: auth.NewStore(db, dir, 0)}
 	// secure=true is the HTTPS case the spec describes; main follows the listener.
-	h.Server = New(h.users, auth.NewSessions(db, true), func() scan.Status { return h.status })
+	h.Server = New(db, h.users, auth.NewSessions(db, true), func() scan.Status { return h.status })
 	h.SetReady(true)
 	return h
 }
@@ -65,6 +65,43 @@ func (h *harness) token(u *auth.User) string {
 		h.t.Fatal(err)
 	}
 	return secret
+}
+
+// put writes a file into a user's storage root the way anything outside the
+// application would: straight onto disk. Call scan afterwards to index it.
+func (h *harness) put(u *auth.User, rel, content string) {
+	h.t.Helper()
+	root, err := h.users.Root(u)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	defer root.Close()
+	if _, err := root.Write(rel, strings.NewReader(content), int64(len(content))); err != nil {
+		h.t.Fatalf("writing %s: %v", rel, err)
+	}
+}
+
+// scan runs the reconciler over one user's root, which is how files that
+// arrived on disk become browsable.
+func (h *harness) scan(u *auth.User) {
+	h.t.Helper()
+	root, err := h.users.Root(u)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	defer root.Close()
+	if _, err := scan.Scan(h.db, u.ID, root, nil); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+// as makes an API-token-authenticated request, which is how a programmatic
+// client reaches the same endpoints the browser uses.
+func (h *harness) as(secret, method, path string, body any) *httptest.ResponseRecorder {
+	h.t.Helper()
+	req := request(method, path, body)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	return h.do(req)
 }
 
 func (h *harness) do(req *http.Request) *httptest.ResponseRecorder {

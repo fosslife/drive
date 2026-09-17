@@ -53,15 +53,15 @@
 
 ## 7. File operations
 
-- [ ] 7.1 Implement folder listing returning name, type, size, and modification time, paginated or streamed; verify a test with 100,000 entries asserts the first page returns without loading the whole folder into memory
-- [ ] 7.2 Return a not-found error with no partial listing for a nonexistent folder; verify a test asserts the error shape
-- [ ] 7.3 Implement download with byte-range support returning partial content; verify a test asserts a full download is byte-identical and a ranged request returns only the requested bytes
-- [ ] 7.4 Implement folder creation, rename, and move within a storage root, preserving contents and identifiers; verify tests assert identity is unchanged after rename and after move
-- [ ] 7.5 Reject a move that would overwrite an existing destination entry unless replacement was explicitly requested, leaving neither side partial; verify a test asserts both paths are unchanged after rejection
-- [ ] 7.6 Reject moving a folder into its own descendant; verify a test asserts the request fails and nothing changed on disk
-- [ ] 7.7 Add ETag preconditions on modifying requests for last-write-wins concurrency; verify a test asserts a stale precondition is rejected
-- [ ] 7.8 Serve stored files with `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, and a restrictive `Content-Security-Policy`, rendering inline only for an allowlist of inert raster image types that excludes SVG and PDF; verify tests assert an uploaded HTML file and a script-bearing SVG are delivered as downloads and do not execute in the application origin, and that a JPEG renders inline
-- [ ] 7.9 Implement folder and multi-selection download streaming an uncompressed zip produced on the fly; verify a test asserts folder structure is preserved, that a folder larger than available memory streams without buffering or staging a copy on disk, and that trashed and unauthorised items are excluded
+- [x] 7.1 Implement folder listing returning name, type, size, and modification time, paginated or streamed; verify a test with 100,000 entries asserts the first page returns without loading the whole folder into memory
+- [x] 7.2 Return a not-found error with no partial listing for a nonexistent folder; verify a test asserts the error shape
+- [x] 7.3 Implement download with byte-range support returning partial content; verify a test asserts a full download is byte-identical and a ranged request returns only the requested bytes
+- [x] 7.4 Implement folder creation, rename, and move within a storage root, preserving contents and identifiers; verify tests assert identity is unchanged after rename and after move
+- [x] 7.5 Reject a move that would overwrite an existing destination entry unless replacement was explicitly requested, leaving neither side partial; verify a test asserts both paths are unchanged after rejection
+- [x] 7.6 Reject moving a folder into its own descendant; verify a test asserts the request fails and nothing changed on disk
+- [x] 7.7 Add ETag preconditions on modifying requests for last-write-wins concurrency; verify a test asserts a stale precondition is rejected
+- [x] 7.8 Serve stored files with `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, and a restrictive `Content-Security-Policy`, rendering inline only for an allowlist of inert raster image types that excludes SVG and PDF; verify tests assert an uploaded HTML file and a script-bearing SVG are delivered as downloads and do not execute in the application origin, and that a JPEG renders inline
+- [x] 7.9 Implement folder and multi-selection download streaming an uncompressed zip produced on the fly; verify a test asserts folder structure is preserved, that a folder larger than available memory streams without buffering or staging a copy on disk, and that trashed and unauthorised items are excluded
 
 ## 8. Upload
 

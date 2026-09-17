@@ -10,7 +10,6 @@ package scan
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/fosslife/drive/internal/index"
 	"github.com/fosslife/drive/internal/storage"
@@ -38,7 +37,7 @@ type row struct {
 	state    string
 }
 
-func (r row) path() string { return join(r.dir, r.name) }
+func (r row) path() string { return index.JoinPath(r.dir, r.name) }
 
 // action is one pending index write. The walk collects these without touching
 // the index, so a walk that fails partway is a read-only no-op.
@@ -92,7 +91,7 @@ func Scan(db *index.DB, userID int64, root *storage.Root, progress func(entries 
 		if !isKnown {
 			if e.IsDir {
 				res.Added++
-				dir, name := split(e.Path)
+				dir, name := index.SplitPath(e.Path)
 				updates = append(updates, action{
 					`INSERT INTO files (user_id, dir, name, kind, size, mtime) VALUES (?, ?, ?, 'folder', 0, ?)`,
 					[]any{userID, dir, name, mtime},
@@ -149,7 +148,7 @@ func Scan(db *index.DB, userID int64, root *storage.Root, progress func(entries 
 	moved := matchMoves(known, appeared, sums)
 	for path, m := range moved {
 		res.Moved++
-		dir, name := split(path)
+		dir, name := index.SplitPath(path)
 		updates = append(updates, action{
 			`UPDATE files SET dir = ?, name = ?, mtime = ?, state = 'present' WHERE id = ?`,
 			[]any{dir, name, m.entry.ModTime.Unix(), m.row.id},
@@ -162,7 +161,7 @@ func Scan(db *index.DB, userID int64, root *storage.Root, progress func(entries 
 			continue
 		}
 		res.Added++
-		dir, name := split(e.Path)
+		dir, name := index.SplitPath(e.Path)
 		updates = append(updates, action{
 			`INSERT INTO files (user_id, dir, name, kind, size, mtime, checksum) VALUES (?, ?, ?, 'file', ?, ?, ?)`,
 			[]any{userID, dir, name, e.Size, e.ModTime.Unix(), sums[e.Path]},
@@ -276,22 +275,6 @@ func applyBatch(db *index.DB, updates []action) error {
 		}
 	}
 	return tx.Commit()
-}
-
-// split separates a relative path into the (dir, name) pair the index stores.
-// A top-level entry has an empty dir.
-func split(p string) (dir, name string) {
-	if i := strings.LastIndexByte(p, '/'); i >= 0 {
-		return p[:i], p[i+1:]
-	}
-	return "", p
-}
-
-func join(dir, name string) string {
-	if dir == "" {
-		return name
-	}
-	return dir + "/" + name
 }
 
 // nullable keeps the checksum column NULL for folders rather than empty.

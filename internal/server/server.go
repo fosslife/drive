@@ -12,20 +12,23 @@ import (
 	"github.com/alexedwards/scs/v2"
 
 	"github.com/fosslife/drive/internal/auth"
+	"github.com/fosslife/drive/internal/index"
 	"github.com/fosslife/drive/internal/scan"
 )
 
 type Server struct {
 	ready      atomic.Bool
 	scanStatus func() scan.Status
+	db         *index.DB
 	users      *auth.Store
 	sessions   *scs.SessionManager
 	limiter    *auth.Limiter
 }
 
-func New(users *auth.Store, sessions *scs.SessionManager, scanStatus func() scan.Status) *Server {
+func New(db *index.DB, users *auth.Store, sessions *scs.SessionManager, scanStatus func() scan.Status) *Server {
 	return &Server{
 		scanStatus: scanStatus,
+		db:         db,
 		users:      users,
 		sessions:   sessions,
 		limiter:    auth.NewLimiter(auth.DefaultMaxFailures, auth.DefaultFailureWindow),
@@ -58,6 +61,12 @@ func (s *Server) routes() []route {
 		{"POST /api/logout", false, s.logout},
 		{"GET /api/me", false, s.me},
 		{"GET /api/scan", false, s.scan},
+
+		{"GET /api/list", false, s.list},
+		{"GET /api/download/{path...}", false, s.download},
+		{"GET /api/archive", false, s.archive},
+		{"POST /api/folders", false, s.createFolder},
+		{"POST /api/move", false, s.move},
 
 		{"GET /api/tokens", false, s.listTokens},
 		{"POST /api/tokens", false, s.createToken},

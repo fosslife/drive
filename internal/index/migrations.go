@@ -3,7 +3,7 @@ package index
 // migrations are applied in order, forward only. Each entry is one schema
 // version: index 0 takes the index to version 1. Never edit a shipped
 // migration, append a new one.
-var migrations = []string{schemaV1}
+var migrations = []string{schemaV1, schemaV2}
 
 // Identity is an INTEGER PRIMARY KEY AUTOINCREMENT throughout: SQLite recycles
 // plain rowids after the highest row is deleted, AUTOINCREMENT does not.
@@ -90,4 +90,13 @@ CREATE TABLE settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+`
+
+// A listing is one folder ordered by name, paged with a keyset cursor. Without
+// name in the index SQLite sorts the whole folder into a temp b-tree first,
+// which is exactly the "first page loads the entire folder" failure the spec
+// rules out. files_listing is dropped because this index supersedes it.
+const schemaV2 = `
+DROP INDEX files_listing;
+CREATE INDEX files_listing ON files(user_id, dir, state, name);
 `

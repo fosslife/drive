@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -139,4 +140,21 @@ func applyOne(db *sql.DB, version int, stmt string) error {
 		return fmt.Errorf("migration %d: %w", version, err)
 	}
 	return nil
+}
+
+// SplitPath separates a relative path into the (dir, name) pair the files table
+// stores, and JoinPath puts it back. A top-level entry has dir "", not ".":
+// these two functions are the only place that knows it.
+func SplitPath(p string) (dir, name string) {
+	if i := strings.LastIndexByte(p, '/'); i >= 0 {
+		return p[:i], p[i+1:]
+	}
+	return "", p
+}
+
+func JoinPath(dir, name string) string {
+	if dir == "" {
+		return name
+	}
+	return dir + "/" + name
 }

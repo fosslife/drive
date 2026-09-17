@@ -81,7 +81,7 @@ type entry struct {
 
 func (f *fixture) lookup(t *testing.T, path string) (entry, bool) {
 	t.Helper()
-	dir, name := split(path)
+	dir, name := index.SplitPath(path)
 	var e entry
 	err := f.db.QueryRow(`SELECT id, kind, size, IFNULL(checksum, ''), state FROM files
 	                      WHERE user_id = ? AND dir = ? AND name = ? AND state <> 'trashed'`,
