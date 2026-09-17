@@ -16,6 +16,7 @@ import (
 
 	"github.com/fosslife/drive/internal/config"
 	"github.com/fosslife/drive/internal/index"
+	"github.com/fosslife/drive/internal/scan"
 	"github.com/fosslife/drive/internal/server"
 )
 
@@ -44,11 +45,15 @@ func run() error {
 		return fmt.Errorf("data directory: %w", err)
 	}
 
-	db, err := index.Open(cfg.IndexPath())
+	db, movedTo, err := index.OpenOrReset(cfg.IndexPath())
 	if err != nil {
 		return err
 	}
 	defer db.Close()
+	if movedTo != "" {
+		slog.Warn("index was unreadable and has been replaced by an empty one; file metadata is being rebuilt by scanning, but accounts, API tokens, and share links were in it and are gone",
+			"moved_to", movedTo)
+	}
 
 	listener, err := net.Listen("tcp", cfg.Addr)
 	if err != nil {
@@ -63,9 +68,11 @@ func run() error {
 		"encrypted", encrypted,
 		"data_dir", cfg.DataDir,
 		"schema_version", index.Version(),
+		"scan_interval", cfg.ScanInterval,
 	)
 
-	s := server.New()
+	scanner := scan.NewScanner(db, cfg.DataDir, cfg.ScanInterval)
+	s := server.New(scanner.Status)
 	s.SetReady(true)
 	httpSrv := &http.Server{
 		Handler:           s.Handler(),
@@ -74,6 +81,11 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Reconciliation runs alongside serving, never before it. A first scan of a
+	// large root takes minutes and must not delay the port opening.
+	go scanner.Run(ctx)
+
 	go func() {
 		<-ctx.Done()
 		s.SetReady(false)

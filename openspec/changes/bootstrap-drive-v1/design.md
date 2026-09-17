@@ -24,8 +24,8 @@ The binding constraint on every decision below: **the filesystem is the source o
 
 ```
 <data-dir>/
-  index.db                  disposable, rebuildable
-  users/<user-id>/          storage root, user files at real paths
+  index.db                  disposable for file metadata, see "What the index owns alone"
+  users/<username>/         storage root, user files at real paths
     .drive/
       tmp/                  in-flight uploads and pre-rename temp files
       trash/<file-id>/      soft-deleted, original path in index
@@ -34,7 +34,19 @@ The binding constraint on every decision below: **the filesystem is the source o
 
 `.drive` is skipped by the reconciler and excluded from listings and search. Everything a user owns still lives under one directory, so backup remains "copy the folder" and trash is included in it.
 
+The root is named for the username, not the numeric account id, so that the folder is self-describing without the index. Usernames are therefore restricted to `[a-z0-9._-]` and cannot be changed in v1; renaming a user would mean moving their storage root, which is a migration, not a settings change.
+
 *Alternative considered:* a single global trash outside the user roots. Rejected — it breaks per-user backup and makes account deletion a cross-directory operation.
+
+### What the index owns alone
+
+Account records — username, password hash, admin flag, API tokens, shares — exist only in the index. Losing `index.db` therefore loses the ability to log in, even though every byte of every file is still on disk at its real path.
+
+This is accepted rather than fixed. The alternative is writing a copy of each account, password hash included, into its own storage root so the index can be reconstructed from the filesystem alone; that duplicates the one secret worth protecting into a second place for a failure the operator is already responsible for preventing. A different database engine does not change this — the accounts live wherever the database lives.
+
+What makes it survivable is the layout above: after index loss, an operator who creates an account with the same username gets the same storage root back, and the reconciler re-adopts every file in it. The backup procedure (task 14.6) is "copy `<data-dir>`", which covers the index by construction.
+
+*Alternative considered:* `users/<user-id>/`. Rejected for exactly this reason — a recreated account would be issued a new id and would not find its own files.
 
 ### Atomic write pipeline
 

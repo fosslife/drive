@@ -6,7 +6,10 @@ package index
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"os"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -22,6 +25,48 @@ func Version() int { return len(migrations) }
 // migrations. It fails rather than running against an index it does not
 // understand or could not fully migrate.
 func Open(path string) (*DB, error) { return open(path, migrations) }
+
+// OpenOrReset opens the index and, if it cannot be opened or migrated, moves it
+// aside and starts an empty one, returning where the old file went. The index
+// holds no file content — the reconciler rebuilds it by scanning the storage
+// roots — so a corrupt index is a setback, not a reason to refuse to start.
+//
+// The cost of a reset is real and is not file data: accounts, API tokens, and
+// share links live only here. That is why the damaged file is kept rather than
+// removed, and why a VersionError is never reset: an index written by a newer
+// binary is ahead of us, not broken, and discarding it would destroy state the
+// newer binary can still read.
+func OpenOrReset(path string) (db *DB, movedTo string, err error) {
+	db, err = Open(path)
+	if err == nil {
+		return db, "", nil
+	}
+	var ve *VersionError
+	if errors.As(err, &ve) {
+		return nil, "", err
+	}
+	if _, statErr := os.Stat(path); statErr != nil {
+		// No file to move aside, so the failure is the directory or the driver.
+		// Resetting cannot help and would hide the real cause.
+		return nil, "", err
+	}
+
+	movedTo = path + ".corrupt-" + time.Now().UTC().Format("20060102T150405Z")
+	// The write-ahead log and shared-memory files belong to the same database;
+	// leaving them behind would corrupt the replacement too.
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		if _, err := os.Stat(path + suffix); err == nil {
+			if err := os.Rename(path+suffix, movedTo+suffix); err != nil {
+				return nil, "", fmt.Errorf("moving unreadable index aside: %w", err)
+			}
+		}
+	}
+	db, err = Open(path)
+	if err != nil {
+		return nil, movedTo, err
+	}
+	return db, movedTo, nil
+}
 
 func open(path string, migs []string) (*DB, error) {
 	dsn := "file:" + path +

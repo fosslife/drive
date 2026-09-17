@@ -119,7 +119,7 @@ If a migration cannot be applied, the system SHALL refuse to start and report th
 
 All state required to reconstruct a running instance SHALL live within a single data directory. The system SHALL provide a documented procedure to produce a consistent backup and to restore from one.
 
-Because the filesystem is the source of truth, restoring only the file contents SHALL yield a working instance after the index is rebuilt.
+Because the filesystem is the source of truth, restoring only the file contents SHALL yield a working instance once accounts are re-created, without any repair step applied to the files themselves. The documented procedure SHALL state that accounts, API tokens, and share links live only in the index and are lost if it is not included in the backup.
 
 #### Scenario: Back up and restore
 
@@ -129,7 +129,7 @@ Because the filesystem is the source of truth, restoring only the file contents 
 #### Scenario: Restore files only
 
 - **WHEN** only the stored files are restored and the index is absent
-- **THEN** the system rebuilds the index and all files are browsable and downloadable
+- **THEN** the system rebuilds the index and, once an account is created with the username its storage root is named for, that account's files are browsable and downloadable
 
 ### Requirement: Operational visibility
 

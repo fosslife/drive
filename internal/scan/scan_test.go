@@ -33,13 +33,13 @@ func setup(t *testing.T) *fixture {
 	t.Cleanup(func() { db.Close() })
 
 	res, err := db.Exec(`INSERT INTO users (username, password_hash, storage_root, created_at)
-	                     VALUES ('ada', 'x', 'users/1', 0)`)
+	                     VALUES ('ada', 'x', 'users/ada', 0)`)
 	if err != nil {
 		t.Fatalf("creating user: %v", err)
 	}
 	userID, _ := res.LastInsertId()
 
-	dir := filepath.Join(base, "users", "1")
+	dir := filepath.Join(base, "users", "ada")
 	root, err := storage.Open(dir, 0)
 	if err != nil {
 		t.Fatalf("opening storage root: %v", err)
@@ -51,7 +51,7 @@ func setup(t *testing.T) *fixture {
 
 func (f *fixture) scan(t *testing.T) Result {
 	t.Helper()
-	res, err := Scan(f.db, f.userID, f.root)
+	res, err := Scan(f.db, f.userID, f.root, nil)
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}
@@ -298,7 +298,7 @@ func TestUnreadableRootAbortsWithZeroIndexWrites(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chmod(locked, 0o700) })
 
-	if _, err := Scan(f.db, f.userID, f.root); err == nil {
+	if _, err := Scan(f.db, f.userID, f.root, nil); err == nil {
 		t.Fatal("Scan succeeded over an unreadable directory, want an error")
 	} else if !strings.Contains(err.Error(), "locked") {
 		t.Errorf("error %q does not name the unreadable directory", err)

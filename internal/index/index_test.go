@@ -153,7 +153,7 @@ func TestIdentifiersAreMonotonicAndNotRecycled(t *testing.T) {
 	db := openTemp(t)
 
 	res, err := db.Exec(`INSERT INTO users (username, password_hash, storage_root, created_at)
-	                     VALUES ('ada', 'x', 'users/1', 0)`)
+	                     VALUES ('ada', 'x', 'users/ada', 0)`)
 	if err != nil {
 		t.Fatalf("creating user: %v", err)
 	}

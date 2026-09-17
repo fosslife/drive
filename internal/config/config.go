@@ -8,13 +8,15 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 // Environment variables. An unset or empty value means "use the default".
 const (
-	EnvDataDir = "DRIVE_DATA_DIR"
-	EnvAddr    = "DRIVE_ADDR"
-	EnvMinFree = "DRIVE_MIN_FREE_BYTES"
+	EnvDataDir      = "DRIVE_DATA_DIR"
+	EnvAddr         = "DRIVE_ADDR"
+	EnvMinFree      = "DRIVE_MIN_FREE_BYTES"
+	EnvScanInterval = "DRIVE_SCAN_INTERVAL"
 )
 
 // DefaultMinFree is the headroom kept on the data volume. A full disk is not
@@ -22,10 +24,16 @@ const (
 // manual recovery. The reserve turns that into an error message.
 const DefaultMinFree = 1 << 30 // 1 GiB
 
+// DefaultScanInterval is how often the reconciler rescans every storage root.
+// It is the ceiling on how stale the index can be after an external change,
+// and a scan of an unchanged root costs one stat per file.
+const DefaultScanInterval = 15 * time.Minute
+
 type Config struct {
-	DataDir string
-	Addr    string
-	MinFree int64
+	DataDir      string
+	Addr         string
+	MinFree      int64
+	ScanInterval time.Duration
 }
 
 // IndexPath is the SQLite index, which is disposable: deleting it loses no
@@ -50,9 +58,10 @@ func (e *InvalidError) Error() string {
 // was started: the caller must exit rather than run half-configured.
 func Load() (Config, error) {
 	c := Config{
-		DataDir: defaultDataDir(),
-		Addr:    ":8080",
-		MinFree: DefaultMinFree,
+		DataDir:      defaultDataDir(),
+		Addr:         ":8080",
+		MinFree:      DefaultMinFree,
+		ScanInterval: DefaultScanInterval,
 	}
 	if v := os.Getenv(EnvDataDir); v != "" {
 		c.DataDir = v
@@ -66,6 +75,13 @@ func Load() (Config, error) {
 			return Config{}, &InvalidError{EnvMinFree, v, "a non-negative whole number of bytes"}
 		}
 		c.MinFree = n
+	}
+	if v := os.Getenv(EnvScanInterval); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			return Config{}, &InvalidError{EnvScanInterval, v, "a positive duration, for example 15m or 1h"}
+		}
+		c.ScanInterval = d
 	}
 	return c, c.validate()
 }

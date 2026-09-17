@@ -51,10 +51,18 @@ type action struct {
 // becomes browsable as it progresses instead of appearing at the very end.
 const batchSize = 500
 
+// progressEvery bounds how often a scan reports progress: often enough to look
+// alive, rarely enough that the status lock is not the bottleneck.
+const progressEvery = 200
+
 // Scan reconciles one user's storage root with the index and reports what it
 // found. It is safe to run while requests are being served, and safe to run
 // repeatedly: an unchanged file costs one stat.
-func Scan(db *index.DB, userID int64, root *storage.Root) (Result, error) {
+//
+// progress, when non-nil, is called with the number of entries walked so far,
+// so a rebuild that takes minutes can say how far it has got. It is called
+// from the scanning goroutine and must not block.
+func Scan(db *index.DB, userID int64, root *storage.Root, progress func(entries int)) (Result, error) {
 	known, err := loadRows(db, userID)
 	if err != nil {
 		return Result{}, err
@@ -74,6 +82,9 @@ func Scan(db *index.DB, userID int64, root *storage.Root) (Result, error) {
 			res.Dirs++
 		} else {
 			res.Files++
+		}
+		if progress != nil && (res.Files+res.Dirs)%progressEvery == 0 {
+			progress(res.Files + res.Dirs)
 		}
 		mtime := e.ModTime.Unix()
 
@@ -130,6 +141,9 @@ func Scan(db *index.DB, userID int64, root *storage.Root) (Result, error) {
 		// Nothing has been written yet, and nothing will be. The index keeps
 		// describing the last state we could actually read.
 		return Result{}, fmt.Errorf("scanning %s: %w", root.Dir(), err)
+	}
+	if progress != nil {
+		progress(res.Files + res.Dirs)
 	}
 
 	moved := matchMoves(known, appeared, sums)

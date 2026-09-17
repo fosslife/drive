@@ -29,13 +29,13 @@
 - [x] 4.3 Mark vanished files as missing and ensure the reconciler has no delete path at all; verify a test removes a file on disk, scans, and asserts the row is marked missing and no other file was deleted or modified
 - [x] 4.4 Abort a scan whole and report the error when a storage root is unreadable, leaving the index unchanged; verify a test makes a root unreadable and asserts zero index writes
 - [x] 4.5 Detect external moves by unique `(checksum, size)` match between a file that vanished and one that appeared in the same scan, preserving identity, falling back to a new identity when ambiguous; verify a test moves a file externally and asserts the identifier is preserved, plus a second test with byte-identical duplicates asserts a new identity rather than a wrong match
-- [ ] 4.6 Rebuild the entire index from the filesystem when it is missing or unreadable at startup; verify a test deletes the index, restarts, and asserts all files are browsable with correct paths
-- [ ] 4.7 Run the scan at startup, periodically, and on demand; verify an on-demand trigger picks up a file added seconds earlier
-- [ ] 4.8 Run scans in the background so they never block startup or request serving, exposing scan state and progress; verify a test asserts requests are served throughout a rebuild of a large root and that responses indicate indexing is incomplete
+- [x] 4.6 Rebuild the entire index from the filesystem when it is missing at startup, and move a corrupt index aside and start a fresh one rather than refusing to start; verify a test deletes the index, restarts, and asserts all files are browsable with correct paths once the account is re-created, and a second test with a corrupt index asserts it is moved aside, rebuilt, and no user file is touched
+- [x] 4.7 Run the scan at startup, periodically, and on demand; verify an on-demand trigger picks up a file added seconds earlier
+- [x] 4.8 Run scans in the background so they never block startup or request serving, exposing scan state and progress; verify a test asserts requests are served throughout a rebuild of a large root and that responses indicate indexing is incomplete
 
 ## 5. Authentication
 
-- [ ] 5.1 Implement user accounts with isolated storage roots and administrator management of create, disable, and delete; verify a test asserts deleting one account leaves another account's files intact
+- [ ] 5.1 Implement user accounts with isolated storage roots named `users/<username>` and restricted to `[a-z0-9._-]`, with administrator management of create, disable, and delete; verify a test asserts deleting one account leaves another account's files intact, that an unsafe username is refused, and that re-creating an account with an existing username reattaches it to that storage root
 - [ ] 5.2 Implement Argon2id password hashing and login with responses that do not reveal whether an account exists; verify a test asserts identical responses for unknown user and wrong password, and that no plaintext password appears in the index
 - [ ] 5.3 Rate-limit failed authentication attempts per account and per source; verify a test asserts attempts are refused or delayed after a threshold
 - [ ] 5.4 Implement server-side sessions using `alexedwards/scs`, delivered in an `HttpOnly; Secure; SameSite=Lax` cookie carrying only an opaque identifier, with expiry and logout revocation; verify a test asserts the cookie attributes, that it carries no identity or privileges, and that a session cannot authenticate after logout
@@ -129,14 +129,14 @@
 - [ ] 14.3 Serve plaintext HTTP only when explicitly enabled, logging a warning; verify the warning appears and that HTTPS is the default otherwise
 - [ ] 14.4 Produce a container image running the same binary with a mounted data directory; verify `docker run` with a volume and published port yields a reachable instance storing data in the mount
 - [ ] 14.5 Cross-compile for linux amd64 and arm64; verify each artifact starts on its target architecture
-- [ ] 14.6 Document and script the backup and restore procedure; verify a backup restored into a fresh data directory yields all users, files, shares, and settings intact, and that restoring files alone yields a working instance after index rebuild
+- [ ] 14.6 Document and script the backup and restore procedure, stating plainly that accounts, API tokens, and share links live only in the index and are lost if it is excluded; verify a backup restored into a fresh data directory yields all users, files, shares, and settings intact, and that restoring files alone yields a working instance after index rebuild and account re-creation
 
 ## 15. End-to-end verification
 
 - [ ] 15.1 Confirm upload streaming by watching resident memory during a 4 GB upload; verify RSS stays flat rather than growing with file size
 - [ ] 15.2 Confirm write durability with `strace -f -e trace=fsync,fdatasync,rename` during an upload; verify fsync on the temp file precedes the rename and that the parent directory is fsynced after it
 - [ ] 15.3 Confirm the reconciler never deletes by running a full external-change cycle of add, move, and remove; verify the count of files deleted by the reconciler is zero
-- [ ] 15.4 Confirm index disposability by deleting the index on a populated instance and restarting; verify every file is browsable, downloadable, and searchable afterwards
+- [ ] 15.4 Confirm index disposability by deleting the index on a populated instance, restarting, and re-creating the account with its original username; verify every file is browsable, downloadable, and searchable afterwards
 - [ ] 15.5 Confirm resumable upload survives a real reverse proxy by testing against nginx, Caddy, and Cloudflare defaults; verify an interrupted large upload resumes to a correct checksum through each
 - [ ] 15.6 Confirm tenant isolation with a cross-user attempt matrix covering listing, download, thumbnail, share creation, and token use; verify every cross-user request is rejected
 - [ ] 15.7 Confirm no operation other than permanent deletion destroys content by running an overwrite, a move onto an existing name, and an interrupted replace; verify the prior content is recoverable from trash in every case

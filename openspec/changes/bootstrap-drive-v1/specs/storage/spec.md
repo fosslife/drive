@@ -8,7 +8,9 @@ Defines how file bytes are persisted and how the system stays truthful about the
 
 The system SHALL store every user file as an ordinary file on disk at a path that mirrors the path shown to the user. The system SHALL NOT store file content in a database, an object store, or any content-addressed or chunked format.
 
-No user-visible state SHALL exist only in the index. Deleting the index MUST NOT lose files, folder structure, or file content.
+No user-visible file state SHALL exist only in the index. Deleting the index MUST NOT lose files, folder structure, or file content.
+
+Account records are the documented exception: they exist only in the index, so deleting it loses the ability to log in. A storage root SHALL be named for its owner's username so that re-creating an account with the same username reattaches that account to its existing files.
 
 #### Scenario: Uploaded file is an ordinary file on disk
 
@@ -65,7 +67,13 @@ The system SHALL be able to reconstruct its index entirely by scanning the stora
 
 - **WHEN** the index database is deleted and the system is started
 - **THEN** the system rebuilds the index by scanning storage
-- **AND** all files and folders are browsable with their correct paths and sizes
+- **AND** once an account is re-created with its original username, all of that account's files and folders are browsable with their correct paths and sizes
+
+#### Scenario: Index is corrupt
+
+- **WHEN** the index database exists but cannot be opened or migrated
+- **THEN** the system moves it aside, starts a new one, and rebuilds by scanning storage
+- **AND** no user file is modified or deleted
 
 ### Requirement: Scanning does not block service
 

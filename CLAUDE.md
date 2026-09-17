@@ -36,13 +36,14 @@ internal/scan/      the reconciler: filesystem → index, add/update/mark-missin
 internal/server/    HTTP surface
 ```
 
-Environment: `DRIVE_DATA_DIR`, `DRIVE_ADDR`, `DRIVE_MIN_FREE_BYTES` (plain byte count, default 1 GiB).
+Environment: `DRIVE_DATA_DIR`, `DRIVE_ADDR`, `DRIVE_MIN_FREE_BYTES` (plain byte count, default 1 GiB),
+`DRIVE_SCAN_INTERVAL` (Go duration, default 15m).
 
 Data directory (default `$XDG_DATA_HOME/drive`, else `~/.local/share/drive`, else `/var/lib/drive`):
 
 ```
-index.db                  disposable, rebuildable by scanning
-users/<user-id>/          storage root, user files at their real paths
+index.db                  file metadata is rebuildable by scanning; accounts are not
+users/<username>/         storage root, user files at their real paths
   .drive/{tmp,trash,thumbs}
 ```
 
@@ -78,9 +79,19 @@ users/<user-id>/          storage root, user files at their real paths
 - The scan walks read-only first and writes afterwards in batches of 500, so a walk that fails partway
   writes nothing at all and a long rebuild becomes browsable as it goes.
 - `storage.Write` does not create parent directories (that is task 7.4), so tests that need one `os.Mkdir` it.
-- **Accounts do not survive index loss yet.** `users` lives only in the index, so task 4.6's "delete the
-  index and restart" leaves the files on disk but nobody to own them. Needs a per-root account record
-  (`users/<id>/.drive/user.json`) written by 5.1 and adopted at startup — decide before 4.6 or 5.1.
+- **Accounts live only in the index, deliberately.** Losing `index.db` loses logins; it does not lose a
+  byte of user data. Storage roots are therefore `users/<username>/`, not `users/<id>/`, so re-creating an
+  account with the same username reattaches it to its files. Usernames are `[a-z0-9._-]` and immutable in
+  v1. **Do not write password hashes into a storage root to make this recoverable** — decided against.
+- No Postgres, now or later. Filename search is a `LIKE` scan, not FTS; a second engine buys nothing and
+  costs the single-binary install.
+- `users.storage_root` is relative to the data directory (`users/ada`), never absolute: the data
+  directory moves between a host and a container, the roots inside it do not.
+- The scanner is one goroutine started with `go scanner.Run(ctx)` after the listener is open. One root
+  failing is logged and skipped, not fatal: an unmounted disk for one account must not stall the others.
+- `GET /api/scan` reports scan progress and `indexing`. **Unauthenticated today like `/healthz`** — task
+  5.9 must move it behind authentication rather than onto the public list. There is deliberately no HTTP
+  route that triggers a scan yet; `Scanner.Trigger()` is the on-demand entry point until auth exists.
 - `strace` is not installed on this machine — task 15.2 needs it.
 
 ## Style
