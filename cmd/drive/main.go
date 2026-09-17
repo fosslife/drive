@@ -17,6 +17,7 @@ import (
 
 	"github.com/fosslife/drive/internal/auth"
 	"github.com/fosslife/drive/internal/config"
+	"github.com/fosslife/drive/internal/files"
 	"github.com/fosslife/drive/internal/index"
 	"github.com/fosslife/drive/internal/scan"
 	"github.com/fosslife/drive/internal/server"
@@ -103,6 +104,7 @@ func run() error {
 	// Reconciliation runs alongside serving, never before it. A first scan of a
 	// large root takes minutes and must not delay the port opening.
 	go scanner.Run(ctx)
+	go reclaimUploads(ctx, db, cfg.DataDir, cfg.UploadTTL)
 
 	go func() {
 		<-ctx.Done()
@@ -117,6 +119,28 @@ func run() error {
 	}
 	slog.Info("drive stopped")
 	return nil
+}
+
+// reclaimUploads discards upload data nobody came back for. It runs on its own
+// timer rather than inside the reconciler, which has no delete path at all and
+// must keep it that way.
+func reclaimUploads(ctx context.Context, db *index.DB, dataDir string, ttl time.Duration) {
+	// A tenth of the retention period: often enough that abandoned data does
+	// not sit around for a whole extra day, rare enough to cost nothing.
+	ticker := time.NewTicker(max(ttl/10, time.Minute))
+	defer ticker.Stop()
+	for {
+		if n, err := files.Reclaim(db, dataDir, ttl); err != nil {
+			slog.Error("reclaiming abandoned uploads", "error", err)
+		} else if n > 0 {
+			slog.Info("reclaimed abandoned uploads", "uploads", n, "older_than", ttl)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // setupURL is the address an operator can actually paste into a browser. A

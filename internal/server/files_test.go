@@ -592,10 +592,11 @@ func TestArchiveDoesNotStageOrBuffer(t *testing.T) {
 	if filesAfter := countFiles(t, h.dataDir); filesAfter != filesBefore {
 		t.Errorf("the data directory gained %d files: the archive was staged on disk", filesAfter-filesBefore)
 	}
-	// A buffered 40 MiB archive would show up plainly here.
-	const ceiling = 16 << 20
-	if grew := after.HeapAlloc; grew > before.HeapAlloc+ceiling {
-		t.Errorf("heap grew from %d to %d streaming a %d byte archive", before.HeapAlloc, grew, n)
+	// Total allocation rather than live heap: monotonic, so it does not depend
+	// on when the collector ran. A buffered 40 MiB archive shows up plainly.
+	const ceiling = 12 << 20
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > ceiling {
+		t.Errorf("streaming a %d byte archive allocated %d, want under %d", n, allocated, ceiling)
 	}
 }
 

@@ -65,12 +65,12 @@
 
 ## 8. Upload
 
-- [ ] 8.1 Implement tus 1.0 create, offset, and append handlers over the atomic write pipeline, streaming to disk without buffering whole files; verify a test uploads a large file and asserts peak process memory does not scale with file size
-- [ ] 8.2 Resume an interrupted upload from the reported offset and finalise into place; verify a test interrupts mid-upload, resumes, and asserts the final checksum matches the source
-- [ ] 8.3 Leave no file at the destination and no modification to an existing file when an upload is aborted; verify a test asserts the destination is untouched
-- [ ] 8.4 Handle name collisions by storing under a non-colliding name unless replacement was explicitly requested; verify a test asserts the existing file is never left partially overwritten
-- [ ] 8.5 Move previous content to trash before a replacement becomes visible at a path, so no operation but permanent deletion destroys content; verify tests assert the replaced content is restorable from trash, that two sequential overwrites without preconditions leave both prior versions accounted for, and that a failure partway leaves the path holding one complete version
-- [ ] 8.6 Reclaim incomplete uploads not resumed within the retention period; verify a test asserts stale temp data is removed and no user-visible file is affected
+- [x] 8.1 Implement tus 1.0 create, offset, and append handlers over the atomic write pipeline, streaming to disk without buffering whole files; verify a test uploads a large file and asserts peak process memory does not scale with file size
+- [x] 8.2 Resume an interrupted upload from the reported offset and finalise into place; verify a test interrupts mid-upload, resumes, and asserts the final checksum matches the source
+- [x] 8.3 Leave no file at the destination and no modification to an existing file when an upload is aborted; verify a test asserts the destination is untouched
+- [x] 8.4 Handle name collisions by storing under a non-colliding name unless replacement was explicitly requested; verify a test asserts the existing file is never left partially overwritten
+- [x] 8.5 Move previous content to trash before a replacement becomes visible at a path, so no operation but permanent deletion destroys content; verify tests assert the replaced content is restorable from trash, that two sequential overwrites without preconditions leave both prior versions accounted for, and that a failure partway leaves the path holding one complete version
+- [x] 8.6 Reclaim incomplete uploads not resumed within the retention period; verify a test asserts stale temp data is removed and no user-visible file is affected
 
 ## 9. Trash
 

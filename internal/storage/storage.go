@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -225,6 +226,113 @@ func (r *Root) Trash(id int64, rel string) error {
 	return r.syncDir(dir)
 }
 
+// CreateUpload opens an empty file under .drive/tmp to receive a resumable
+// upload and returns its name, which the caller records so a later request can
+// carry on where this one stopped.
+func (r *Root) CreateUpload() (string, error) {
+	name, f, err := r.createTemp()
+	if err != nil {
+		return "", err
+	}
+	return name, f.Close()
+}
+
+// UploadOffset is how many bytes of an upload are actually on disk.
+//
+// The file is the offset. A column in the index can disagree with the disk
+// after a crash, and telling a client "I have n bytes" when the last n-k were
+// never fsynced is how a resumed upload finishes with a corrupt file.
+func (r *Root) UploadOffset(temp string) (int64, error) {
+	name, err := tempPath(temp)
+	if err != nil {
+		return 0, err
+	}
+	st, err := r.root.Stat(name)
+	if err != nil {
+		return 0, err
+	}
+	return st.Size(), nil
+}
+
+// AppendUpload appends src to an upload and returns the new offset, fsynced.
+// It writes straight from the request body to the file: nothing here holds more
+// than a copy buffer, whatever the size of the upload.
+func (r *Root) AppendUpload(temp string, src io.Reader) (int64, error) {
+	name, err := tempPath(temp)
+	if err != nil {
+		return 0, err
+	}
+	f, err := r.root.OpenFile(name, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	// A short copy is not an error to recover from: whatever arrived is on
+	// disk, and the offset we report afterwards is what the client resumes at.
+	_, copyErr := io.Copy(f, src)
+	if err := f.Sync(); err != nil {
+		return 0, fmt.Errorf("flushing upload: %w", err)
+	}
+	st, err := f.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return st.Size(), copyErr
+}
+
+// FinishUpload publishes an upload at rel and returns what was stored. It
+// refuses an occupied destination: a caller that means to replace moves the
+// existing entry to Trash first.
+func (r *Root) FinishUpload(temp, rel string) (Info, error) {
+	src, err := tempPath(temp)
+	if err != nil {
+		return Info{}, err
+	}
+	name, err := relPath(rel)
+	if err != nil {
+		return Info{}, err
+	}
+	switch _, err := r.root.Lstat(name); {
+	case err == nil:
+		return Info{}, fmt.Errorf("%w: %q", ErrExists, rel)
+	case !errors.Is(err, fs.ErrNotExist):
+		return Info{}, err
+	}
+	if dir := path.Dir(name); dir != "." {
+		if err := r.root.MkdirAll(dir, 0o700); err != nil {
+			return Info{}, fmt.Errorf("creating %s: %w", dir, err)
+		}
+	}
+	if err := r.root.Rename(src, name); err != nil {
+		return Info{}, fmt.Errorf("publishing %s: %w", rel, err)
+	}
+	if err := r.syncDir(path.Dir(name)); err != nil {
+		return Info{}, err
+	}
+	// ponytail: the checksum is computed by reading the finished file back,
+	// one extra sequential pass. crypto/sha256 can marshal its state between
+	// chunks if that ever costs more than the fsync per chunk already does.
+	return r.Checksum(rel)
+}
+
+// DiscardUpload removes an upload's temporary data. It is the one removal in
+// this package, and it can only reach a file no user has ever seen.
+func (r *Root) DiscardUpload(temp string) error {
+	name, err := tempPath(temp)
+	if err != nil {
+		return err
+	}
+	if err := r.root.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("discarding upload: %w", err)
+	}
+	return nil
+}
+
+// CheckSpace reports whether a write of size bytes would eat into the reserve.
+// Upload creation asks before accepting rather than failing 4 GB in.
+func (r *Root) CheckSpace(size int64) error { return r.checkSpace(size) }
+
 // Entry is one filesystem entry under a root, at a path relative to it.
 type Entry struct {
 	Path    string
@@ -324,12 +432,25 @@ func (r *Root) createTemp() (string, *os.File, error) {
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", nil, fmt.Errorf("naming temp file: %w", err)
 	}
-	name := Internal + "/tmp/" + hex.EncodeToString(b[:])
+	name := tempPrefix + hex.EncodeToString(b[:])
 	f, err := r.root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return "", nil, fmt.Errorf("creating temp file: %w", err)
 	}
 	return name, f, nil
+}
+
+const tempPrefix = Internal + "/tmp/"
+
+// tempPath rejects anything that is not a name this package handed out. The
+// temp name comes back from the index on every resume, and a path that could
+// point elsewhere would turn an upload into a write-anywhere primitive.
+func tempPath(temp string) (string, error) {
+	rest, ok := strings.CutPrefix(temp, tempPrefix)
+	if !ok || rest == "" || strings.ContainsAny(rest, "/.") {
+		return "", fmt.Errorf("%w: %q is not an upload", ErrInvalidPath, temp)
+	}
+	return temp, nil
 }
 
 func (r *Root) syncDir(dir string) error {

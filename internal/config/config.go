@@ -17,6 +17,7 @@ const (
 	EnvAddr         = "DRIVE_ADDR"
 	EnvMinFree      = "DRIVE_MIN_FREE_BYTES"
 	EnvScanInterval = "DRIVE_SCAN_INTERVAL"
+	EnvUploadTTL    = "DRIVE_UPLOAD_RETENTION"
 )
 
 // DefaultMinFree is the headroom kept on the data volume. A full disk is not
@@ -29,11 +30,17 @@ const DefaultMinFree = 1 << 30 // 1 GiB
 // and a scan of an unchanged root costs one stat per file.
 const DefaultScanInterval = 15 * time.Minute
 
+// DefaultUploadTTL is how long an interrupted upload waits to be resumed before
+// its temporary data is reclaimed. Long enough to survive a laptop closing for
+// the night, short enough that an abandoned 4 GB upload is not permanent.
+const DefaultUploadTTL = 24 * time.Hour
+
 type Config struct {
 	DataDir      string
 	Addr         string
 	MinFree      int64
 	ScanInterval time.Duration
+	UploadTTL    time.Duration
 }
 
 // IndexPath is the SQLite index, which is disposable: deleting it loses no
@@ -62,6 +69,7 @@ func Load() (Config, error) {
 		Addr:         ":8080",
 		MinFree:      DefaultMinFree,
 		ScanInterval: DefaultScanInterval,
+		UploadTTL:    DefaultUploadTTL,
 	}
 	if v := os.Getenv(EnvDataDir); v != "" {
 		c.DataDir = v
@@ -82,6 +90,13 @@ func Load() (Config, error) {
 			return Config{}, &InvalidError{EnvScanInterval, v, "a positive duration, for example 15m or 1h"}
 		}
 		c.ScanInterval = d
+	}
+	if v := os.Getenv(EnvUploadTTL); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			return Config{}, &InvalidError{EnvUploadTTL, v, "a positive duration, for example 24h"}
+		}
+		c.UploadTTL = d
 	}
 	return c, c.validate()
 }

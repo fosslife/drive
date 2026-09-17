@@ -3,7 +3,7 @@ package index
 // migrations are applied in order, forward only. Each entry is one schema
 // version: index 0 takes the index to version 1. Never edit a shipped
 // migration, append a new one.
-var migrations = []string{schemaV1, schemaV2}
+var migrations = []string{schemaV1, schemaV2, schemaV3}
 
 // Identity is an INTEGER PRIMARY KEY AUTOINCREMENT throughout: SQLite recycles
 // plain rowids after the highest row is deleted, AUTOINCREMENT does not.
@@ -99,4 +99,12 @@ CREATE TABLE settings (
 const schemaV2 = `
 DROP INDEX files_listing;
 CREATE INDEX files_listing ON files(user_id, dir, state, name);
+`
+
+// Whether an upload replaces what is at its destination is decided when the
+// upload is created and applied when it finishes, so it has to survive every
+// restart in between.
+const schemaV3 = `
+ALTER TABLE uploads ADD COLUMN replace INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX uploads_stale ON uploads(updated_at);
 `

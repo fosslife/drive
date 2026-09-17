@@ -68,6 +68,12 @@ func (s *Server) routes() []route {
 		{"POST /api/folders", false, s.createFolder},
 		{"POST /api/move", false, s.move},
 
+		{"OPTIONS /api/uploads", false, s.uploadOptions},
+		{"POST /api/uploads", false, s.createUpload},
+		{"HEAD /api/uploads/{id}", false, s.uploadStatus},
+		{"PATCH /api/uploads/{id}", false, s.uploadChunk},
+		{"DELETE /api/uploads/{id}", false, s.deleteUpload},
+
 		{"GET /api/tokens", false, s.listTokens},
 		{"POST /api/tokens", false, s.createToken},
 		{"DELETE /api/tokens/{id}", false, s.revokeToken},

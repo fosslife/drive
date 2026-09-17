@@ -178,6 +178,9 @@ func CreateFolder(db *index.DB, userID int64, root *storage.Root, path string) (
 // reconciler would find them on its next pass anyway; doing it now is what
 // makes a new folder appear in its parent's listing immediately.
 func indexFolders(db *index.DB, userID int64, root *storage.Root, path string) error {
+	if path == "" {
+		return nil // the storage root itself, which has no row
+	}
 	parts := strings.Split(path, "/")
 	for i := range parts {
 		p := strings.Join(parts[:i+1], "/")

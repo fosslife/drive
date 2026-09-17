@@ -39,7 +39,7 @@ internal/server/    HTTP surface
 ```
 
 Environment: `DRIVE_DATA_DIR`, `DRIVE_ADDR`, `DRIVE_MIN_FREE_BYTES` (plain byte count, default 1 GiB),
-`DRIVE_SCAN_INTERVAL` (Go duration, default 15m).
+`DRIVE_SCAN_INTERVAL` (Go duration, default 15m), `DRIVE_UPLOAD_RETENTION` (Go duration, default 24h).
 
 Data directory (default `$XDG_DATA_HOME/drive`, else `~/.local/share/drive`, else `/var/lib/drive`):
 
@@ -145,6 +145,25 @@ users/<username>/         storage root, user files at their real paths
 - Archives are `zip.Store` written straight to the `ResponseWriter` — no temp file, no buffer, no
   `Content-Length`. A failure partway abandons the stream unclosed: a truncated zip fails to open, which
   beats a complete-looking archive quietly missing files.
+- tus 1.0 is implemented directly in `server/upload.go` + `files/upload.go`: `POST /api/uploads` (create,
+  `Upload-Length` + `Upload-Metadata` carrying `filename`/`dir`/`replace`), `HEAD` (offset), `PATCH`
+  (append), `DELETE` (abort), `OPTIONS` (capabilities). All authenticated, all one API.
+- **The temp file's size is the upload offset, not the `offset_bytes` column.** A column can disagree
+  with the disk after a crash, and telling a client "I have n bytes" when the last few were never
+  fsynced is how a resumed upload finishes corrupt. The column is a denormalised copy for the sweep.
+- The finished upload's checksum is computed by reading the published file back — one extra sequential
+  pass, marked `ponytail:`. `crypto/sha256` can marshal its state between chunks if that ever costs more
+  than the per-chunk fsync already does.
+- `storage.tempPath` refuses any name this package did not hand out. The temp name round-trips through
+  the index on every resume, and a path that could point elsewhere turns an upload into write-anywhere.
+- A collision stores `report (2).pdf` unless `replace` was asked for; `replace` sends the previous
+  content to trash first, so two sequential overwrites leave both prior versions under their own ids.
+  A replacement gets a **new** identity — the trashed row keeps the old one, because it is the
+  restorable version.
+- `DRIVE_UPLOAD_RETENTION` (default 24h) bounds abandoned upload data. `files.Reclaim` runs on its own
+  ticker in `main`, **not** inside the reconciler, which has no delete path and must keep it that way.
+- Memory-ceiling tests assert on `MemStats.TotalAlloc`, never `HeapAlloc`: total allocation is monotonic,
+  so it does not depend on when the collector happened to run. `HeapAlloc` flaked under `-race`.
 - `strace` is not installed on this machine — task 15.2 needs it.
 
 ## Style
