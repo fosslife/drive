@@ -5,7 +5,7 @@ Any design that makes the index authoritative for user-visible state is wrong, h
 
 Full plan: `openspec/changes/bootstrap-drive-v1/` (proposal, design, specs, tasks).
 Read `design.md` before making an architectural call.
-Rejected ideas and their reasons: `BACKLOG.md`. Decisions taken while building: `DECISIONS.md`.
+Kept out of v1 on purpose, to look at later: `BACKLOG.md`. Decisions taken while building: `DECISIONS.md`.
 
 ## Workflow
 
@@ -27,6 +27,18 @@ go build ./... && go vet ./... && go test ./...
 go build -ldflags "-X main.Version=v0.1.0" -o /tmp/drive ./cmd/drive
 ```
 
+The interface is built separately and embedded. **`go build` does not run it**, so a release build
+is two steps and the second one is easy to forget:
+
+```sh
+npm --prefix web ci && npm --prefix web run build   # → web/dist, embedded by web/embed.go
+npm --prefix web test                               # pure logic, node --test, no dependencies
+npm --prefix web run test:e2e                       # real binary + real Chrome, ~25s
+```
+
+Without that build the binary still serves the whole API and answers `/` with a note saying so;
+`web.Built()` is the check, and the Go UI tests skip rather than pass quietly.
+
 Podman is available; there is no Docker. `Containerfile` and `compose.yml` land with task 14.4.
 `strace` is not installed on this machine — task 15.2 needs it.
 
@@ -43,6 +55,7 @@ internal/files/     browse, create, rename, move, trash: index reads, filesystem
 internal/share/     public links: create, resolve, confine to one subtree
 internal/thumb/     thumbnails: decode, orient, scale, cache as derived data
 internal/server/    HTTP surface
+web/                React + Vite interface, its dist/, and the embed.FS that compiles it in
 ```
 
 Environment: `DRIVE_DATA_DIR`, `DRIVE_ADDR`, `DRIVE_MIN_FREE_BYTES` (plain byte count, default 1 GiB),

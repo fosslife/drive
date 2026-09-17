@@ -292,6 +292,15 @@ func TestEveryRouteIsAuthenticatedOrExplicitlyPublic(t *testing.T) {
 		"GET /api/shares/{token}/list":               true,
 		"GET /api/shares/{token}/download/{path...}": true,
 		"GET /api/shares/{token}/thumb/{path...}":    true,
+		// The interface itself. It is HTML, JavaScript and CSS with no user data
+		// in it: everything it displays it fetches from the routes above, which
+		// are authenticated. Serving it behind authentication would mean there
+		// was no page to log in from.
+		"GET /": true,
+		// An unmatched API path. Public because a 404 discloses nothing, and
+		// answering it with 401 would tell an anonymous caller that a typo'd
+		// endpoint exists.
+		"GET /api/": true,
 	}
 	// A new entry here is the moment to ask why.
 

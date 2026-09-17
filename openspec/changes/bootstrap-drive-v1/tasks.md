@@ -108,19 +108,19 @@
 
 ## 13. Frontend
 
-- [ ] 13.1 Set up React with Vite building to static assets embedded via `embed.FS`; verify the built binary serves the UI with no adjacent asset directory
-- [ ] 13.2 Implement login, logout, and the first-run setup screen; verify an operator can complete setup and log in end to end
-- [ ] 13.3 Implement the virtualised file browser with folder navigation, rename, move, create folder, and delete; verify scrolling stays smooth at 100,000 rows
-- [ ] 13.4 Implement drag-and-drop resumable upload with per-file progress and resume after an interrupted connection; verify a large upload survives a deliberate network interruption
-- [ ] 13.5 Render thumbnails asynchronously so they never gate a render; verify the list scrolls smoothly while thumbnails are still loading
-- [ ] 13.6 Implement trash browsing with restore and permanent delete; verify a deleted file can be restored from the UI
-- [ ] 13.7 Implement filename search with result paths; verify searching a partial term returns matching files
-- [ ] 13.8 Implement share link creation with optional password and expiry, plus listing and revocation; verify a created link opens in a logged-out browser and stops working after revocation
-- [ ] 13.9 Implement API token management showing the secret once; verify the secret is absent when revisiting the list
-- [ ] 13.10 Implement multi-selection in the file browser with bulk delete, move, and download; verify selecting fifty items and deleting them moves all fifty to trash in one action
-- [ ] 13.11 Implement full-size image viewing in place with next and previous navigation within the folder; verify clicking an image displays it and arrow navigation moves between images
-- [ ] 13.12 Surface scan progress and the incomplete-index state in the UI; verify browsing during a rebuild shows indexed results and indicates indexing is still running
-- [ ] 13.13 Surface actionable errors for insufficient disk space, stale ETag preconditions, and failed uploads; verify each produces a message naming the cause rather than a generic failure
+- [x] 13.1 Set up React with Vite building to static assets embedded via `embed.FS`; verify the built binary serves the UI with no adjacent asset directory
+- [x] 13.2 Implement login, logout, and the first-run setup screen; verify an operator can complete setup and log in end to end
+- [x] 13.3 Implement the virtualised file browser with folder navigation, rename, move, create folder, and delete; verify scrolling stays smooth at 100,000 rows
+- [x] 13.4 Implement drag-and-drop resumable upload with per-file progress and resume after an interrupted connection; verify a large upload survives a deliberate network interruption
+- [x] 13.5 Render thumbnails asynchronously so they never gate a render; verify the list scrolls smoothly while thumbnails are still loading
+- [x] 13.6 Implement trash browsing with restore and permanent delete; verify a deleted file can be restored from the UI
+- [x] 13.7 Implement filename search with result paths; verify searching a partial term returns matching files
+- [x] 13.8 Implement share link creation with optional password and expiry, plus listing and revocation; verify a created link opens in a logged-out browser and stops working after revocation
+- [x] 13.9 Implement API token management showing the secret once; verify the secret is absent when revisiting the list
+- [x] 13.10 Implement multi-selection in the file browser with bulk delete, move, and download; verify selecting fifty items and deleting them moves all fifty to trash in one action
+- [x] 13.11 Implement full-size image viewing in place with next and previous navigation within the folder; verify clicking an image displays it and arrow navigation moves between images
+- [x] 13.12 Surface scan progress and the incomplete-index state in the UI; verify browsing during a rebuild shows indexed results and indicates indexing is still running
+- [x] 13.13 Surface actionable errors for insufficient disk space, stale ETag preconditions, and failed uploads; verify each produces a message naming the cause rather than a generic failure
 
 ## 14. Transport and distribution
 

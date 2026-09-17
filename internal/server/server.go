@@ -15,6 +15,7 @@ import (
 	"github.com/fosslife/drive/internal/index"
 	"github.com/fosslife/drive/internal/scan"
 	"github.com/fosslife/drive/internal/thumb"
+	"github.com/fosslife/drive/web"
 )
 
 type Server struct {
@@ -104,6 +105,16 @@ func (s *Server) routes() []route {
 		{"POST /api/admin/users", false, s.requireAdmin(s.createUser)},
 		{"POST /api/admin/users/{username}/disabled", false, s.requireAdmin(s.setUserDisabled)},
 		{"DELETE /api/admin/users/{username}", false, s.requireAdmin(s.deleteUser)},
+
+		// An unmatched /api/ path is a client mistake, and answering it with the
+		// interface's HTML would send whoever wrote that client looking in the
+		// wrong place. It is registered before the catch-all below so that only
+		// real pages reach the page handler.
+		{"GET /api/", true, s.apiNotFound},
+		// The interface itself: HTML, JavaScript and CSS, which are public the
+		// way a login page is public. Every byte of user data it displays comes
+		// from the authenticated API above it.
+		{"GET /", true, web.Handler().ServeHTTP},
 	}
 }
 
@@ -129,6 +140,10 @@ func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 		scan.Status
 		Indexing bool `json:"indexing"`
 	}{status, status.Indexing()})
+}
+
+func (s *Server) apiNotFound(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotFound, "no such endpoint: "+r.URL.Path)
 }
 
 // health reports readiness only. No version, no paths, no configuration: it is

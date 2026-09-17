@@ -1,0 +1,6 @@
+node_modules/
+
+# Build output. .gitkeep stays so go:embed has something to match on a
+# machine that has never run the frontend build.
+dist/*
+!dist/.gitkeep

@@ -1,0 +1,2 @@
+Placeholder. go:embed needs dist/ to contain at least one file, so this one is
+committed and copied back in by every build (it lives in web/public/).

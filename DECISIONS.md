@@ -190,9 +190,47 @@ how it got here is worse than no record.
   allowlist already does exactly this, so there is no second endpoint. Thumbnails are served
   `inline` because they are our own re-encoded pixels, not stored bytes.
 
+## Frontend
+
+- `web/` is one directory holding the Vite project, its build output, and the `embed.go` that
+  compiles that output in. `go:embed` cannot reach above its own package, so `dist/` has to live
+  beside the Go file; keeping the sources there too means everything about the interface is in one
+  place.
+- `web/dist/.gitkeep` is committed and re-copied from `web/public/` by every build, because
+  `go:embed` fails the build outright on an empty directory. That is what lets `go build ./...`
+  work on a machine with no Node toolchain; `web.Built()` reports the difference at runtime and the
+  Go UI tests skip rather than pass quietly.
+- Plain JavaScript and JSX, no TypeScript. The API shapes are small and each is used in one place;
+  a compiler, a tsconfig and a type package are more moving parts than they earn here. Add it if
+  the interface grows a second consumer of the same shapes.
+- No router, no state library, no component library, no virtual-list package. `useRoute` is fifteen
+  lines over `history.pushState` and `popstate`; `windowOf` is arithmetic over a fixed row height.
+  `navigate()` is the only way to change the URL — a bare `replaceState` changes the address bar
+  without telling the router, which is how the setup screen once refused to leave itself.
+- `useListing` numbers its requests instead of serialising them. Dropping a refresh because an
+  older one is in flight loses it permanently and leaves the folder showing something untrue,
+  which is what fifty uploads finishing at once produces.
+- The tus client is written out rather than taken from `tus-js-client`: the part that matters is
+  resuming from the offset the *server* reports after a drop, and that is the part a library hides.
+  A refusal (507, 409) is never retried; only a broken connection is.
+- Thumbnails are `<img loading="lazy">`. The native attribute is the whole asynchronous story, and
+  `onError` falling back to an icon is how "no preview for this type" reaches the screen.
+- Renaming, moving and naming a new folder use `prompt()`. It is native, accessible and zero code.
+  A folder picker is the upgrade when typing a deep path becomes the complaint.
+- `GET /` serves the interface and is public; `GET /api/` answers a JSON 404. Both are in the
+  reviewed public list. Serving HTML for a mistyped API path sends whoever wrote that client
+  looking in the wrong place.
+
 ## Testing
 
 - Memory-ceiling tests assert on `MemStats.TotalAlloc`, never `HeapAlloc`: total allocation is
   monotonic, so it does not depend on when the collector happened to run. `HeapAlloc` flaked under
   `-race`.
 - `storage.Write` does not create parent directories, so tests that need one `os.Mkdir` it.
+- The interface has two test layers and no framework. `web/src/*.test.js` is `node --test` over the
+  pure modules — the window arithmetic, the error wording, the tus resume — with zero dependencies.
+  `web/e2e/` drives a real binary in a real Chrome via `puppeteer-core`, which downloads no browser
+  and uses whichever Chrome the machine has. The section 13 acceptance criteria are browser-level
+  claims; checking them against a fake would not be checking them.
+- e2e tests that count `.row` elements must account for virtualisation: only a screenful exists in
+  the DOM. The fifty-item selection test sets a viewport tall enough to hold fifty rows.
