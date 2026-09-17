@@ -22,6 +22,17 @@ func (s *Server) rootFor(r *http.Request) (*storage.Root, error) {
 	return s.users.Root(userFrom(r.Context()))
 }
 
+// rootOf opens a root by account id, for the one case where the account that
+// owns the bytes is not the one that asked for them: a share link. The account
+// is re-read rather than trusted, so disabling it stops its links too.
+func (s *Server) rootOf(userID int64) (*storage.Root, error) {
+	u, err := s.users.Active(userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.users.Root(u)
+}
+
 func fileError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, files.ErrNotFound):
@@ -205,6 +216,13 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 	}
 	defer root.Close()
 
+	serveFile(w, r, root, e)
+}
+
+// serveFile writes one stored file to the response, with the headers that keep
+// stored bytes from executing in this origin. Share links serve through here
+// too: the defence cannot be per-endpoint.
+func serveFile(w http.ResponseWriter, r *http.Request, root *storage.Root, e files.Entry) {
 	f, err := root.Open(e.Path)
 	if err != nil {
 		fileError(w, err)

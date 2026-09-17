@@ -57,6 +57,12 @@ func (s *Server) routes() []route {
 		// against yet; the printed one-time token is the credential.
 		{"GET /api/setup", true, s.setupOpen},
 		{"POST /api/setup", true, s.completeSetup},
+		// Share access is public by definition: the token in the URL is the
+		// whole credential, and every one of these is read-only.
+		{"GET /api/shares/{token}", true, s.shareInfo},
+		{"POST /api/shares/{token}/unlock", true, s.unlockShare},
+		{"GET /api/shares/{token}/list", true, s.shareList},
+		{"GET /api/shares/{token}/download/{path...}", true, s.shareDownload},
 
 		{"POST /api/logout", false, s.logout},
 		{"GET /api/me", false, s.me},
@@ -80,6 +86,10 @@ func (s *Server) routes() []route {
 		{"HEAD /api/uploads/{id}", false, s.uploadStatus},
 		{"PATCH /api/uploads/{id}", false, s.uploadChunk},
 		{"DELETE /api/uploads/{id}", false, s.deleteUpload},
+
+		{"GET /api/shares", false, s.listShares},
+		{"POST /api/shares", false, s.createShare},
+		{"DELETE /api/shares/{id}", false, s.revokeShare},
 
 		{"GET /api/tokens", false, s.listTokens},
 		{"POST /api/tokens", false, s.createToken},

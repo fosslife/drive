@@ -25,7 +25,6 @@ func TestOnlyPermanentDeleteDestroysContent(t *testing.T) {
 		"internal/storage/storage.go:Write":         "removes its own temp file when the write failed; the destination is never touched",
 		"internal/storage/storage.go:Purge":         "permanent deletion, the one place bytes are destroyed on purpose",
 		"internal/storage/storage.go:DiscardUpload": "removes an abandoned upload's temp data, which has no destination yet",
-		"internal/auth/tokens.go:CreateToken":       "time.Truncate on a timestamp; no file is involved",
 	}
 
 	eachFunc(t, func(site string, fn *ast.FuncDecl) {
@@ -33,7 +32,7 @@ func TestOnlyPermanentDeleteDestroysContent(t *testing.T) {
 			name := ""
 			switch n := n.(type) {
 			case *ast.CallExpr:
-				if sel, ok := n.Fun.(*ast.SelectorExpr); ok && destroys(sel) {
+				if sel, ok := n.Fun.(*ast.SelectorExpr); ok && destroys(n, sel) {
 					name = sel.Sel.Name
 				}
 			case *ast.Ident:
@@ -56,15 +55,33 @@ func TestOnlyPermanentDeleteDestroysContent(t *testing.T) {
 
 // destroys reports whether a call can remove or shorten something on disk.
 // Matched on the name because resolving types across the module would cost far
-// more than the one false positive an allowlist entry absorbs — except for
-// Create, which is an account or a folder far more often than it is a file.
-func destroys(sel *ast.SelectorExpr) bool {
+// more than the few false positives it avoids. The two exceptions are the
+// names that are almost never a file: Create is an account or a folder unless
+// it is os.Create, and Truncate is a timestamp when its argument is a duration.
+func destroys(call *ast.CallExpr, sel *ast.SelectorExpr) bool {
 	switch sel.Sel.Name {
-	case "Remove", "RemoveAll", "Truncate":
+	case "Remove", "RemoveAll":
 		return true
+	case "Truncate":
+		return !takesFrom(call, "time")
 	case "Create", "WriteFile":
 		pkg, ok := sel.X.(*ast.Ident)
 		return ok && pkg.Name == "os"
+	}
+	return false
+}
+
+// takesFrom reports whether any argument is a value out of the named package,
+// as in t.Truncate(time.Second).
+func takesFrom(call *ast.CallExpr, pkg string) bool {
+	for _, arg := range call.Args {
+		sel, ok := arg.(*ast.SelectorExpr)
+		if !ok {
+			continue
+		}
+		if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == pkg {
+			return true
+		}
 	}
 	return false
 }

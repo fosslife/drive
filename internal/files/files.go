@@ -40,6 +40,11 @@ type Entry struct {
 	Size    int64     `json:"size"`
 	ModTime time.Time `json:"modified"`
 	ETag    string    `json:"etag"`
+	// State is "present", "trashed", or "missing". Everything that returns an
+	// Entry to a user has already filtered on it, so it is not serialised; it
+	// matters to a caller that looked an entry up by identity and has to decide
+	// what a trashed target means — a share link, for one.
+	State string `json:"-"`
 }
 
 // DefaultPageSize bounds a listing when the caller does not.
@@ -49,7 +54,7 @@ const DefaultPageSize = 500
 // to be serialised, so the page is what bounds that, not the folder.
 const MaxPageSize = 2000
 
-const columns = `id, dir, name, kind, size, mtime`
+const columns = `id, dir, name, kind, size, mtime, state`
 
 func scanEntry(row interface{ Scan(...any) error }) (Entry, error) {
 	var (
@@ -58,7 +63,7 @@ func scanEntry(row interface{ Scan(...any) error }) (Entry, error) {
 		mtime    int64
 		modified time.Time
 	)
-	if err := row.Scan(&e.ID, &dir, &e.Name, &e.Kind, &e.Size, &mtime); err != nil {
+	if err := row.Scan(&e.ID, &dir, &e.Name, &e.Kind, &e.Size, &mtime, &e.State); err != nil {
 		return Entry{}, err
 	}
 	modified = time.Unix(mtime, 0)
@@ -134,6 +139,21 @@ func Lookup(db *index.DB, userID int64, path string) (Entry, error) {
 	}
 	if err != nil {
 		return Entry{}, fmt.Errorf("looking up %q: %w", path, err)
+	}
+	return e, nil
+}
+
+// ByID finds one entry by identity, in whatever state it is in. Anything that
+// holds a reference rather than a path — a share link — goes through here: the
+// reference survives a rename and a move for free, and the caller decides what
+// a trashed or missing target means to it.
+func ByID(db *index.DB, userID, id int64) (Entry, error) {
+	e, err := scanEntry(db.QueryRow(`SELECT `+columns+` FROM files WHERE id = ? AND user_id = ?`, id, userID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Entry{}, fmt.Errorf("%w: no entry with id %d", ErrNotFound, id)
+	}
+	if err != nil {
+		return Entry{}, fmt.Errorf("looking up %d: %w", id, err)
 	}
 	return e, nil
 }

@@ -35,6 +35,7 @@ internal/storage/   one Root per user: atomic writes, checksums, integrity, spac
 internal/scan/      the reconciler: filesystem → index, add/update/mark-missing only
 internal/auth/      accounts, Argon2id passwords, scs sessions, API tokens, failed-login limiter
 internal/files/     browse, create, rename, move, trash: index reads, filesystem writes
+internal/share/     public links: create, resolve, confine to one subtree
 internal/server/    HTTP surface
 ```
 
@@ -180,6 +181,21 @@ users/<username>/         storage root, user files at their real paths
 - Search escapes `%`, `_` and `\` in the term and passes `ESCAPE '\'`: unescaped, searching `%` returns
   every file a user has. It signals `truncated` from asking for `limit+1` rows rather than paging —
   a filename search that needs page two needs a better word, not a cursor.
+- A share points at a **file id, not a path**, so rename and move keep it working for nothing, a trashed
+  target answers 410 and shows as `"state":"trashed"` in the owner's listing, and purging the target
+  takes the link with it by foreign-key cascade. Restoring the target revives the same link.
+- Share tokens are `auth.NewSecret`/`auth.HashSecret` — the same 256-bit secret as an API token, and
+  **only the hash is stored**. The URL therefore exists exactly once, in the creation response: a link
+  that was not copied has to be created again. The listing shows the target, never the token.
+- A share password is Argon2id (a human chose it, unlike a 256-bit token) and the proof of it lives in
+  the **scs session**, not in the URL: a password in a query string ends up in logs and history.
+  `unlockShare` calls `RenewToken` before `Put`, for the same fixation reason login does.
+- Share listings return paths **relative to the shared folder** (`Access.Relative`). Returning
+  `projects/alpha/notes.txt` for a share of `projects/alpha` would disclose the parent the spec
+  says must stay hidden. Everything outside the subtree is one answer, 404, naming nothing.
+- The confinement is `files.Lookup` by `(user_id, dir, name)`: stored paths are canonical, so a
+  non-canonical `rel` cannot match any row. `fs.ValidPath` and `Access.contains` are assertions on
+  top of that, not the mechanism.
 - Memory-ceiling tests assert on `MemStats.TotalAlloc`, never `HeapAlloc`: total allocation is monotonic,
   so it does not depend on when the collector happened to run. `HeapAlloc` flaked under `-race`.
 - `strace` is not installed on this machine — task 15.2 needs it.

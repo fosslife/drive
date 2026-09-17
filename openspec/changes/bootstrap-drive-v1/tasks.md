@@ -87,13 +87,13 @@
 
 ## 11. Sharing
 
-- [ ] 11.1 Create share links for a file or folder in the owner's root, identified by a high-entropy token that does not encode path, name, or identifier; verify a test asserts tokens are unguessable and reveal nothing about the target
-- [ ] 11.2 Serve shared files and folder listings to unauthenticated visitors, read-only and confined to the shared subtree; verify tests assert every modifying operation is refused and that requests above the shared folder are rejected without disclosing the parent path
-- [ ] 11.3 Add optional password protection with hashed storage and rate-limited attempts; verify a test asserts no content or listing is returned before the correct password is supplied
-- [ ] 11.4 Add optional expiry that refuses access after the expiry time with no administrator action; verify a test asserts access is refused after expiry and that a link without expiry stays valid
-- [ ] 11.5 Implement listing, inspecting, and immediately effective revocation of a user's share links; verify a test asserts a revoked link is refused on the next request
-- [ ] 11.6 Stop serving a link whose target is trashed and report it as such to the owner, while keeping links working across rename and move; verify tests cover trashed, renamed, and moved targets
-- [ ] 11.7 Reject share creation for a path outside the creator's storage root; verify a test asserts rejection
+- [x] 11.1 Create share links for a file or folder in the owner's root, identified by a high-entropy token that does not encode path, name, or identifier; verify a test asserts tokens are unguessable and reveal nothing about the target
+- [x] 11.2 Serve shared files and folder listings to unauthenticated visitors, read-only and confined to the shared subtree; verify tests assert every modifying operation is refused and that requests above the shared folder are rejected without disclosing the parent path
+- [x] 11.3 Add optional password protection with hashed storage and rate-limited attempts; verify a test asserts no content or listing is returned before the correct password is supplied
+- [x] 11.4 Add optional expiry that refuses access after the expiry time with no administrator action; verify a test asserts access is refused after expiry and that a link without expiry stays valid
+- [x] 11.5 Implement listing, inspecting, and immediately effective revocation of a user's share links; verify a test asserts a revoked link is refused on the next request
+- [x] 11.6 Stop serving a link whose target is trashed and report it as such to the owner, while keeping links working across rename and move; verify tests cover trashed, renamed, and moved targets
+- [x] 11.7 Reject share creation for a path outside the creator's storage root; verify a test asserts rejection
 
 ## 12. Previews
 

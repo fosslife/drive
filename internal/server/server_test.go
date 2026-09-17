@@ -285,9 +285,14 @@ func TestEveryRouteIsAuthenticatedOrExplicitlyPublic(t *testing.T) {
 		"POST /api/login": true, // the thing that produces credentials
 		"GET /api/setup":  true, // first run: the printed token is the credential
 		"POST /api/setup": true,
+		// Share access: the token in the URL is the whole credential, and every
+		// one of these is read-only and confined to one shared item.
+		"GET /api/shares/{token}":                    true,
+		"POST /api/shares/{token}/unlock":            true,
+		"GET /api/shares/{token}/list":               true,
+		"GET /api/shares/{token}/download/{path...}": true,
 	}
-	// Share access (group 11) joins this list when it lands, and a new entry
-	// here is the moment to ask why.
+	// A new entry here is the moment to ask why.
 
 	h := newHarness(t)
 	placeholder := regexp.MustCompile(`\{[^}]*\}`)

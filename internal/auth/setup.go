@@ -34,13 +34,13 @@ func (s *Store) OpenSetup() (string, error) {
 		return "", nil
 	}
 
-	secret, err := newSecret()
+	secret, err := NewSecret()
 	if err != nil {
 		return "", err
 	}
 	if _, err := s.db.Exec(`INSERT INTO settings (key, value) VALUES (?, ?)
 	                        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-		setupTokenKey, hashToken(secret)); err != nil {
+		setupTokenKey, HashSecret(secret)); err != nil {
 		return "", fmt.Errorf("opening setup: %w", err)
 	}
 	return secret, nil
@@ -56,7 +56,7 @@ func (s *Store) CheckSetupToken(token string) error {
 		return ErrSetupUnavailable
 	case err != nil:
 		return fmt.Errorf("reading setup state: %w", err)
-	case stored != hashToken(token):
+	case stored != HashSecret(token):
 		return ErrSetupUnavailable
 	}
 	return nil
@@ -79,7 +79,7 @@ func (s *Store) CompleteSetup(token, username, password string) (*User, error) {
 		return nil, errors.New("password must not be empty")
 	}
 
-	hash := hashToken(token)
+	hash := HashSecret(token)
 	res, err := s.db.Exec(`DELETE FROM settings WHERE key = ? AND value = ?`, setupTokenKey, hash)
 	if err != nil {
 		return nil, fmt.Errorf("consuming the setup token: %w", err)

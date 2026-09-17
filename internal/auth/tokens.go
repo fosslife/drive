@@ -33,14 +33,14 @@ func (s *Store) CreateToken(userID int64, name string) (secret string, t Token, 
 	if name == "" {
 		return "", Token{}, errors.New("token name must not be empty")
 	}
-	secret, err = newSecret()
+	secret, err = NewSecret()
 	if err != nil {
 		return "", Token{}, err
 	}
 
 	created := time.Now()
 	res, err := s.db.Exec(`INSERT INTO api_tokens (user_id, name, token_hash, created_at) VALUES (?, ?, ?, ?)`,
-		userID, name, hashToken(secret), created.Unix())
+		userID, name, HashSecret(secret), created.Unix())
 	if err != nil {
 		return "", Token{}, fmt.Errorf("creating token: %w", err)
 	}
@@ -94,7 +94,7 @@ func (s *Store) AuthenticateToken(secret string) (*User, error) {
 	)
 	err := s.db.QueryRow(`SELECT t.id, u.id, u.username, u.is_admin, u.disabled, u.storage_root
 	                      FROM api_tokens t JOIN users u ON u.id = t.user_id
-	                      WHERE t.token_hash = ? AND u.disabled = 0`, hashToken(secret)).
+	                      WHERE t.token_hash = ? AND u.disabled = 0`, HashSecret(secret)).
 		Scan(&id, &u.ID, &u.Username, &u.IsAdmin, &u.Disabled, &u.StorageRoot)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -108,9 +108,10 @@ func (s *Store) AuthenticateToken(secret string) (*User, error) {
 	return &u, nil
 }
 
-// newSecret is the shape every opaque secret here takes: 256 random bits in a
-// form that survives a URL and a copy-paste out of a terminal.
-func newSecret() (string, error) {
+// NewSecret is the shape every opaque secret here takes — API token, setup
+// token, share link: 256 random bits in a form that survives a URL and a
+// copy-paste out of a terminal.
+func NewSecret() (string, error) {
 	b := make([]byte, tokenBytes)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("generating a secret: %w", err)
@@ -118,9 +119,9 @@ func newSecret() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// hashToken is a plain SHA-256: the secret is 256 random bits, so there is
+// HashSecret is a plain SHA-256: the secret is 256 random bits, so there is
 // nothing to brute-force and no reason to pay Argon2id on every API request.
-func hashToken(secret string) string {
+func HashSecret(secret string) string {
 	sum := sha256.Sum256([]byte(secret))
 	return hex.EncodeToString(sum[:])
 }
