@@ -127,10 +127,17 @@ func TestSessionCookieCarriesNoAuthority(t *testing.T) {
 	ada := h.account("ada", false)
 	c := sessionCookie(t, login(t, h, "ada", testPassword))
 
-	for _, leak := range []string{"ada", "admin", "user", "id"} {
+	for _, leak := range []string{"ada", "admin"} {
 		if strings.Contains(strings.ToLower(c.Value), leak) {
 			t.Errorf("the session cookie value %q contains %q", c.Value, leak)
 		}
+	}
+	// Two logins by the same account produce different handles, which is the
+	// claim: the value is random rather than derived from who is behind it.
+	// Looking for short words like "id" in a random base64 string only finds
+	// coincidences — at 43 characters one turns up about one run in a hundred.
+	if again := sessionCookie(t, login(t, h, "ada", testPassword)); again.Value == c.Value {
+		t.Error("two logins produced the same session handle")
 	}
 
 	req := request("GET", "/api/me", nil)

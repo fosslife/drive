@@ -251,6 +251,30 @@ how it got here is worse than no record.
   reviewed public list. Serving HTML for a mistyped API path sends whoever wrote that client
   looking in the wrong place.
 
+## End-to-end verification
+
+- Section 15 runs the built binary as a process (`cmd/drive/acceptance_test.go`): claims about the
+  product are checked against the product, not against a package. The expensive ones are gated —
+  `DRIVE_BIG_UPLOAD_TEST=1` (4 GB), `DRIVE_PROXY_TEST=1` (two proxy containers) — and skipped, never
+  quietly passed, where the tool they need is missing.
+- Resident memory over a 4 GB upload, measured from `/proc/<pid>/statm`: 40.3 MiB at rest, 40.8 MiB
+  at peak. `MemStats` cannot answer for another process, which is the one an operator watches.
+- **nginx refuses uploads out of the box**: `client_max_body_size` defaults to 1 MiB and the web
+  client sends 8 MiB chunks, so every chunk is answered 413. The client does **not** shrink its
+  chunks to fit — that would be compensating for someone else's configuration in our code, and every
+  proxy would want a different number. Instead `explain(413)` names the setting to raise, because the
+  drive sends no 413 of its own, so one can only have come from in front of it. Caddy needs nothing.
+  Both are in `docs/proxies.md`, along with Cloudflare's documented limits marked unverified —
+  testing those needs an account and a public name.
+- With `proxy_request_buffering off`, nginx goes on forwarding its buffered body after the browser
+  has dropped, so the offset a client just read can already be stale. The drive answers the resume
+  with 409 and its current offset, and re-reading is the whole fix. That is the case that justifies
+  "the offset comes from the server, never from the client's count" — it turned up as a real 409 in
+  the proxy test, not as a hypothetical.
+- 15.2 needs `strace`, which this machine does not have. The test is written and skips here rather
+  than asserting on something weaker: syscall ordering is the claim, and headers or timings are not
+  evidence of it.
+
 ## Testing
 
 - Memory-ceiling tests assert on `MemStats.TotalAlloc`, never `HeapAlloc`: total allocation is

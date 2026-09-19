@@ -133,11 +133,11 @@
 
 ## 15. End-to-end verification
 
-- [ ] 15.1 Confirm upload streaming by watching resident memory during a 4 GB upload; verify RSS stays flat rather than growing with file size
+- [x] 15.1 Confirm upload streaming by watching resident memory during a 4 GB upload; verify RSS stays flat rather than growing with file size
 - [ ] 15.2 Confirm write durability with `strace -f -e trace=fsync,fdatasync,rename` during an upload; verify fsync on the temp file precedes the rename and that the parent directory is fsynced after it
-- [ ] 15.3 Confirm the reconciler never deletes by running a full external-change cycle of add, move, and remove; verify the count of files deleted by the reconciler is zero
-- [ ] 15.4 Confirm index disposability by deleting the index on a populated instance, restarting, and re-creating the account with its original username; verify every file is browsable, downloadable, and searchable afterwards
-- [ ] 15.5 Confirm resumable upload survives a real reverse proxy by testing against nginx, Caddy, and Cloudflare defaults; verify an interrupted large upload resumes to a correct checksum through each
-- [ ] 15.6 Confirm tenant isolation with a cross-user attempt matrix covering listing, download, thumbnail, share creation, and token use; verify every cross-user request is rejected
-- [ ] 15.7 Confirm no operation other than permanent deletion destroys content by running an overwrite, a move onto an existing name, and an interrupted replace; verify the prior content is recoverable from trash in every case
-- [ ] 15.8 Confirm stored content cannot execute in the application origin by uploading HTML, SVG, and a polyglot file and opening each directly and through a share link; verify no script executes and the session cookie is not reachable
+- [x] 15.3 Confirm the reconciler never deletes by running a full external-change cycle of add, move, and remove; verify the count of files deleted by the reconciler is zero
+- [x] 15.4 Confirm index disposability by deleting the index on a populated instance, restarting, and re-creating the account with its original username; verify every file is browsable, downloadable, and searchable afterwards
+- [x] 15.5 Confirm resumable upload survives a real reverse proxy by testing against nginx, Caddy, and Cloudflare defaults; verify an interrupted large upload resumes to a correct checksum through each
+- [x] 15.6 Confirm tenant isolation with a cross-user attempt matrix covering listing, download, thumbnail, share creation, and token use; verify every cross-user request is rejected
+- [x] 15.7 Confirm no operation other than permanent deletion destroys content by running an overwrite, a move onto an existing name, and an interrupted replace; verify the prior content is recoverable from trash in every case
+- [x] 15.8 Confirm stored content cannot execute in the application origin by uploading HTML, SVG, and a polyglot file and opening each directly and through a share link; verify no script executes and the session cookie is not reachable

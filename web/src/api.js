@@ -27,7 +27,12 @@ export function explain(status, serverMessage) {
     case 412:
       return 'This changed somewhere else since you loaded it. Reload the folder and try again.'
     case 413:
-      return 'That request was too large.'
+      // The drive has no request size limit of its own, so this came from
+      // something in front of it. nginx's default is 1 MiB and an upload chunk
+      // is 8 MiB, which is how this is met in practice — and it is the
+      // operator's configuration to fix, not something this client works around
+      // by sending smaller chunks.
+      return 'A proxy in front of the drive refused the request as too large. Raise its request body limit to at least 8 MB — in nginx, client_max_body_size.'
     case 415:
       return serverMessage || 'There is no preview for this kind of file.'
     case 429:

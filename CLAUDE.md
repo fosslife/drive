@@ -44,9 +44,13 @@ kept out of the default run because it costs minutes and a network:
 
 ```sh
 DRIVE_CONTAINER_TEST=1 go test ./cmd/drive -run Container   # podman build + run + reach it
+DRIVE_PROXY_TEST=1 go test ./cmd/drive -run Proxy           # nginx and Caddy in front of it
+DRIVE_BIG_UPLOAD_TEST=1 go test ./cmd/drive -run FourGig    # 4 GB upload, RSS watched from /proc
 scripts/release.sh                                          # dist/drive-linux-{amd64,arm64}
 scripts/backup.sh backup <data-dir> <backup-dir>            # docs/backup.md
 ```
+
+Point `TMPDIR` at real disk for the 4 GB one; `/tmp` here is a 16 GB tmpfs.
 
 `strace` is not installed on this machine — task 15.2 needs it. Neither is `qemu-user-static`, so the
 arm64 release artifact is checked by reading its ELF header and skips the part that runs it.

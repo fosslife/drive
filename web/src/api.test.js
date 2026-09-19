@@ -17,6 +17,16 @@ test('a stale precondition says something changed elsewhere', () => {
   assert.match(message, /reload/i)
 })
 
+// 15.5: nginx refuses an 8 MiB upload chunk out of the box. The drive sends no
+// 413 of its own, so the message has to point at the proxy and name the setting
+// — the alternative was shrinking our chunks to fit someone else's default.
+test('a chunk refused by a proxy says which limit to raise', () => {
+  const message = explain(413, '')
+  assert.match(message, /proxy/i)
+  assert.match(message, /client_max_body_size/)
+  assert.match(message, /8 MB/)
+})
+
 test('an unexplained failure still names the status rather than nothing', () => {
   assert.match(explain(500, ''), /500/)
   assert.doesNotMatch(explain(500, ''), /undefined|\[object/)

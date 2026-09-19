@@ -76,9 +76,16 @@ func TestContainerImageServesFromAMountedDataDirectory(t *testing.T) {
 func containerEngine(t *testing.T) string {
 	t.Helper()
 	for _, engine := range []string{"podman", "docker"} {
-		if _, err := exec.LookPath(engine); err == nil {
-			return engine
+		if _, err := exec.LookPath(engine); err != nil {
+			continue
 		}
+		// Installed is not the same as working: rootless podman needs a storage
+		// driver its filesystem supports, and an engine that cannot start a
+		// container is the machine's problem rather than a failure of ours.
+		if out, err := exec.Command(engine, "info").CombinedOutput(); err != nil {
+			t.Skipf("%s is installed but cannot run: %v\n%s", engine, err, out)
+		}
+		return engine
 	}
 	t.Skip("no podman or docker on this machine")
 	return ""
