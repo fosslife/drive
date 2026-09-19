@@ -52,7 +52,7 @@ scripts/backup.sh backup <data-dir> <backup-dir>            # docs/backup.md
 
 Point `TMPDIR` at real disk for the 4 GB one; `/tmp` here is a 16 GB tmpfs.
 
-`strace` is not installed on this machine — task 15.2 needs it. Neither is `qemu-user-static`, so the
+The fsync-ordering test needs `strace` and skips without it. `qemu-user-static` is not installed, so the
 arm64 release artifact is checked by reading its ELF header and skips the part that runs it.
 
 ## Layout

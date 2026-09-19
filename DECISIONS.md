@@ -271,9 +271,12 @@ how it got here is worse than no record.
   with 409 and its current offset, and re-reading is the whole fix. That is the case that justifies
   "the offset comes from the server, never from the client's count" — it turned up as a real 409 in
   the proxy test, not as a hypothetical.
-- 15.2 needs `strace`, which this machine does not have. The test is written and skips here rather
-  than asserting on something weaker: syscall ordering is the claim, and headers or timings are not
-  evidence of it.
+- 15.2 asserts on `strace` output and skips where the tracer is absent, rather than asserting on
+  something weaker: syscall ordering is the claim, and headers or timings are not evidence of it.
+  A passing ordering test is easy to write and vacuous, so both halves were checked by mutation —
+  drop the `f.Sync()` in `AppendUpload` and it reports the temp file was never flushed; drop the
+  `syncDir` after the rename in `FinishUpload` and it names the directory. Note which function:
+  an upload publishes through `FinishUpload`, not `publish`, so mutating `publish` proves nothing.
 
 ## Testing
 

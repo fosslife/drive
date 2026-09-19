@@ -134,7 +134,7 @@
 ## 15. End-to-end verification
 
 - [x] 15.1 Confirm upload streaming by watching resident memory during a 4 GB upload; verify RSS stays flat rather than growing with file size
-- [ ] 15.2 Confirm write durability with `strace -f -e trace=fsync,fdatasync,rename` during an upload; verify fsync on the temp file precedes the rename and that the parent directory is fsynced after it
+- [x] 15.2 Confirm write durability with `strace -f -e trace=fsync,fdatasync,rename` during an upload; verify fsync on the temp file precedes the rename and that the parent directory is fsynced after it
 - [x] 15.3 Confirm the reconciler never deletes by running a full external-change cycle of add, move, and remove; verify the count of files deleted by the reconciler is zero
 - [x] 15.4 Confirm index disposability by deleting the index on a populated instance, restarting, and re-creating the account with its original username; verify every file is browsable, downloadable, and searchable afterwards
 - [x] 15.5 Confirm resumable upload survives a real reverse proxy by testing against nginx, Caddy, and Cloudflare defaults; verify an interrupted large upload resumes to a correct checksum through each
