@@ -40,19 +40,40 @@ function useCollection(url, extract = (body) => body) {
   return { items, error, loading, act }
 }
 
-function Panel({ title, error, loading, children, actions }) {
+// The other three series have the same anatomy as the inventory: a heading,
+// the operations that apply to the whole series, the sheet itself, and a notes
+// column saying what this series is and what its actions really do. The notes
+// are the only onboarding anybody gets, so they are written for the relative
+// who was handed an account and never read anything else.
+function Panel({ title, error, loading, children, actions, reveal, notes }) {
   return (
     <main className="panel">
       <div className="toolbar">
-        <h1>{title}</h1>
-        <span className="spacer" />
-        {actions}
+        <div className="refhead">
+          <h1>{title}</h1>
+          <span className="spacer" />
+          {actions}
+        </div>
       </div>
       {error && <p className="error bar">{error}</p>}
-      {loading ? <p className="note">Loading…</p> : children}
+      {reveal && <div className="reveal">{reveal}</div>}
+      <div className="sheet">{loading ? <p className="note">Reading the register…</p> : children}</div>
+      <aside className="notes" aria-label="Scope and content">
+        {notes}
+      </aside>
     </main>
   )
 }
+
+const Extent = ({ count, unit, sub }) => (
+  <section>
+    <h2>Extent</h2>
+    <p className="extent-figure live">
+      {count.toLocaleString()} {count === 1 ? unit : `${unit}s`}
+    </p>
+    {sub && <p className="extent-sub live">{sub}</p>}
+  </section>
+)
 
 // 13.6: what is in the trash, put back where it came from, or destroyed. This
 // is the only screen in the application that can lose a byte, so its wording
@@ -66,26 +87,48 @@ export function Trash() {
     }
   }
 
+  const bytes = items.reduce((n, e) => n + (e.kind === 'folder' ? 0 : e.size || 0), 0)
+
   return (
     <Panel
       title="Trash"
       error={error}
       loading={loading}
       actions={
-        <button disabled={!items.length} onClick={empty}>
+        <button className="destructive" disabled={!items.length} onClick={empty}>
           Empty trash
         </button>
       }
+      notes={
+        <>
+          <Extent count={items.length} unit="item" sub={`${formatSize(bytes)} still on disk`} />
+          <section className="prose">
+            <h2>Access and use</h2>
+            <p>
+              Material withdrawn from the collection. Nothing here has been destroyed — every item still occupies disk
+              and goes back to the exact path it came from.
+            </p>
+            <p className="caveat">
+              Delete forever is the only action anywhere in this interface that frees a byte. Items also expire on
+              their own once they have sat here for the retention period this drive was started with.
+            </p>
+          </section>
+        </>
+      }
     >
       {items.length === 0 ? (
-        <p className="note">The trash is empty.</p>
+        <p className="rows-empty">
+          <strong>Nothing has been withdrawn.</strong>
+          Deleting a file in Files moves it here first, and it waits here until you empty it or the retention period
+          runs out.
+        </p>
       ) : (
         <table>
           <thead>
             <tr>
               <th>Was at</th>
-              <th>Size</th>
-              <th>Deleted</th>
+              <th className="num">Extent</th>
+              <th className="num">Withdrawn</th>
               <th />
             </tr>
           </thead>
@@ -93,13 +136,14 @@ export function Trash() {
             {items.map((e) => (
               <tr key={e.id}>
                 <td title={e.path}>{e.path}</td>
-                <td>{e.kind === 'folder' ? '' : formatSize(e.size)}</td>
-                <td>{formatDate(e.deleted)}</td>
+                <td className="num">{e.kind === 'folder' ? '' : formatSize(e.size)}</td>
+                <td className="num">{formatDate(e.deleted)}</td>
                 <td className="actions">
                   <button onClick={() => act(() => api(`/api/trash/${e.id}/restore`, { method: 'POST' }))}>
                     Restore
                   </button>
                   <button
+                    className="destructive"
                     onClick={() =>
                       window.confirm(`Permanently delete "${e.path}"? This cannot be undone.`) &&
                       act(() => api(`/api/trash/${e.id}`, { method: 'DELETE' }))
@@ -122,19 +166,45 @@ export function Trash() {
 // the whole administration surface.
 export function Shares({ navigate }) {
   const { items, error, loading, act } = useCollection('/api/shares')
+  const live = items.filter((l) => l.state === 'present').length
 
   return (
-    <Panel title="Share links" error={error} loading={loading}>
+    <Panel
+      title="Share links"
+      error={error}
+      loading={loading}
+      notes={
+        <>
+          <Extent
+            count={items.length}
+            unit="link"
+            sub={items.length ? `${live.toLocaleString()} still resolving` : null}
+          />
+          <section className="prose">
+            <h2>Access and use</h2>
+            <p>
+              Issued copies. Anyone holding one of these links can read what it points at without an account, and
+              nothing else in your drive.
+            </p>
+            <p>Revoking takes effect on the visitor's next request. There is nothing to clean up afterwards.</p>
+          </section>
+        </>
+      }
+    >
       {items.length === 0 ? (
-        <p className="note">No share links. Select a file or folder and choose Share.</p>
+        <p className="rows-empty">
+          <strong>Nothing has been issued.</strong>
+          Select one file or folder in Files and choose Share. The link is shown once, and you can take it back here at
+          any time.
+        </p>
       ) : (
         <table>
           <thead>
             <tr>
               <th>Target</th>
               <th>Password</th>
-              <th>Expires</th>
-              <th>Created</th>
+              <th className="num">Expires</th>
+              <th className="num">Issued</th>
               <th />
             </tr>
           </thead>
@@ -153,8 +223,8 @@ export function Shares({ navigate }) {
                   {link.state !== 'present' && <em> — {link.state}, this link no longer works</em>}
                 </td>
                 <td>{link.protected ? 'Yes' : 'No'}</td>
-                <td>{link.expires ? formatDate(link.expires) : 'Never'}</td>
-                <td>{formatDate(link.created)}</td>
+                <td className="num">{link.expires ? formatDate(link.expires) : 'Never'}</td>
+                <td className="num">{formatDate(link.created)}</td>
                 <td className="actions">
                   <button onClick={() => act(() => api(`/api/shares/${link.id}`, { method: 'DELETE' }))}>Revoke</button>
                 </td>
@@ -198,20 +268,29 @@ export function ShareDialog({ entry, onClose }) {
   return (
     <div className="viewer" onClick={onClose}>
       <form className="card" onClick={(e) => e.stopPropagation()} onSubmit={create}>
-        <h1>Share “{entry.name}”</h1>
+        <h1>Issue a link</h1>
         {link ? (
           <>
-            <p>Anyone with this link can read it. It is shown once and is not stored anywhere it can be read again.</p>
-            <input readOnly value={url} onFocus={(e) => e.target.select()} />
-            <button type="button" onClick={() => navigator.clipboard?.writeText(url)}>
-              Copy link
-            </button>
-            <button type="button" onClick={onClose}>
-              Done
-            </button>
+            <p>
+              Anyone with this link can read <strong>{entry.name}</strong>. It is shown once and is not stored anywhere
+              it can be read again — copy it now.
+            </p>
+            <input readOnly value={url} onFocus={(e) => e.target.select()} aria-label="Share link" />
+            <div className="row-actions">
+              <button className="primary" type="button" onClick={() => navigator.clipboard?.writeText(url)}>
+                Copy link
+              </button>
+              <button type="button" onClick={onClose}>
+                Done
+              </button>
+            </div>
           </>
         ) : (
           <>
+            <p>
+              A public link to <strong>{entry.name}</strong>. It reaches that item and nothing else, and you can revoke
+              it from Share links.
+            </p>
             <label>
               Password (optional)
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" />
@@ -221,10 +300,14 @@ export function ShareDialog({ entry, onClose }) {
               <input type="datetime-local" value={expires} onChange={(e) => setExpires(e.target.value)} />
             </label>
             {error && <p className="error">{error}</p>}
-            <button disabled={busy}>{busy ? 'Creating…' : 'Create link'}</button>
-            <button type="button" onClick={onClose}>
-              Cancel
-            </button>
+            <div className="row-actions">
+              <button className="primary" disabled={busy}>
+                {busy ? 'Creating…' : 'Create link'}
+              </button>
+              <button type="button" onClick={onClose}>
+                Cancel
+              </button>
+            </div>
           </>
         )}
       </form>
@@ -245,26 +328,58 @@ export function Tokens() {
   }
 
   return (
-    <Panel title="API tokens" error={error} loading={loading} actions={<button onClick={create}>New token</button>}>
-      {secret && (
-        <div className="card">
-          <p>
-            <strong>Copy “{secret.name}” now.</strong> This is the only time it is shown; the server keeps only a hash
-            of it.
-          </p>
-          <input readOnly value={secret.secret} onFocus={(e) => e.target.select()} />
-          <button onClick={() => setSecret(null)}>I have copied it</button>
-        </div>
-      )}
+    <Panel
+      title="API tokens"
+      error={error}
+      loading={loading}
+      actions={
+        <button className="primary" onClick={create}>
+          New token
+        </button>
+      }
+      reveal={
+        secret && (
+          <div className="card">
+            <h1>Copy “{secret.name}” now</h1>
+            <p>This is the only time it is shown. The server keeps a hash of it and cannot show it to you again.</p>
+            <input readOnly value={secret.secret} onFocus={(e) => e.target.select()} aria-label="Token secret" />
+            <div className="row-actions">
+              <button className="primary" onClick={() => setSecret(null)}>
+                I have copied it
+              </button>
+            </div>
+          </div>
+        )
+      }
+      notes={
+        <>
+          <Extent count={items.length} unit="token" />
+          <section className="prose">
+            <h2>Access and use</h2>
+            <p>
+              Keys of access. A token authenticates as you and reaches exactly your files — the same drive, the same
+              limits, no browser session.
+            </p>
+            <p className="caveat">
+              The secret exists in one response and nowhere else. Revoking is immediate; anything still using that
+              token stops working at once.
+            </p>
+          </section>
+        </>
+      }
+    >
       {items.length === 0 ? (
-        <p className="note">No tokens. A token authenticates as you and reaches exactly your files.</p>
+        <p className="rows-empty">
+          <strong>No tokens.</strong>
+          Create one to reach this drive from a script or another machine without handing over your password.
+        </p>
       ) : (
         <table>
           <thead>
             <tr>
               <th>Name</th>
-              <th>Created</th>
-              <th>Last used</th>
+              <th className="num">Issued</th>
+              <th className="num">Last used</th>
               <th />
             </tr>
           </thead>
@@ -272,8 +387,8 @@ export function Tokens() {
             {items.map((token) => (
               <tr key={token.id}>
                 <td>{token.name}</td>
-                <td>{formatDate(token.created_at)}</td>
-                <td>{token.last_used_at ? formatDate(token.last_used_at) : 'Never'}</td>
+                <td className="num">{formatDate(token.created_at)}</td>
+                <td className="num">{token.last_used_at ? formatDate(token.last_used_at) : 'Never'}</td>
                 <td className="actions">
                   <button onClick={() => act(() => api(`/api/tokens/${token.id}`, { method: 'DELETE' }))}>Revoke</button>
                 </td>

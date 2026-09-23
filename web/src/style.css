@@ -1,176 +1,786 @@
-/* One stylesheet, no framework. The interface is a header, a toolbar and a list
-   of rows; a design system would be more code than the application. */
+/* The drive published as an archival finding aid.
+   ---------------------------------------------------------------------------
+   A finding aid is the document an archive prints about itself: the collection
+   states its own extent, is arranged in series, and is described down to the
+   item. Depth is shown by indent, numbering and rule weight — never by a
+   disclosure widget, an elevated card or a drop shadow. A printed document has
+   rules and margins, not elevation, so nothing below casts an outer shadow;
+   the one box-shadow in the file draws an inset hairline in the single place a
+   border could not go.
+
+   Two faces, both self-hosted (a self-hosted drive that phones a font CDN on
+   every load is not self-hosted). Both carry a width axis, which is load
+   bearing here rather than decorative: Archivo goes expanded for the masthead's
+   institutional voice, Martian Mono goes condensed so a column of reference
+   codes and byte counts stays narrow enough to leave the title room. */
+
+/* Declared by hand rather than imported whole. The packages ship Cyrillic and
+   Vietnamese cuts as well, and `unicode-range` means a browser never downloads
+   them — but `go:embed` does not read unicode-range, so every one of those cuts
+   would sit in the binary of every release forever. Latin and Latin Extended
+   cover the interface; a filename in a script these faces do not carry falls
+   back to the system stack for those glyphs, which is what unicode-range does
+   in any case. The mono only ever sets figures, dates and byte counts. */
+
+@font-face {
+  font-family: 'Archivo Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url('@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Archivo Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url('@fontsource-variable/archivo/files/archivo-latin-ext-wdth-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Martian Mono Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  font-stretch: 75% 112.5%;
+  src: url('@fontsource-variable/martian-mono/files/martian-mono-latin-wdth-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ── The reading room ─────────────────────────────────────────────────────
+   Ground is acid-free board: cool grey-white with a green cast. Not cream —
+   this is an institutional document printed on archival stock, not a book.
+   One committed colour, bindery green, owns the masthead and the series rail
+   at full strength. Buff manila is container furniture and nothing else.
+   Oxblood is reserved absolutely for restriction and destruction; if it
+   appears anywhere a byte is not at stake, that is a bug. */
 
 :root {
-  --bg: #fbfbfa;
-  --fg: #1c1c1a;
-  --muted: #6b6b66;
-  --line: #e2e1dd;
-  --accent: #2f6fd0;
-  --danger: #b3261e;
-  color-scheme: light dark;
+  --paper: #f4f5f2;
+  --paper-2: #e7eae4;
+  --paper-3: #dde1d9;
+  --ink: #15191b;
+  --ink-2: #545c58;
+  --rule: #d1d6ce;
+  --rule-2: #aeb5aa;
+
+  --green: #1d3b2e;
+  --green-2: #163024;
+  --on-green: #e9ddc3;
+  --on-green-2: #a9b6a8;
+
+  --buff: #b4914f;
+  --buff-2: #c7a978;
+
+  --oxblood: #7d211c;
+  --oxblood-field: #f1e2e0;
+  --on-oxblood: #fdf7f6;
+
+  --focus: #1d3b2e;
+  --select-bg: #c7a978;
+  --select-fg: #15191b;
+
+  --sans: 'Archivo Variable', ui-sans-serif, system-ui, sans-serif;
+  --mono: 'Martian Mono Variable', ui-monospace, 'SF Mono', monospace;
+
+  --rail: 13.5rem;
+  --notes: 18rem;
+  --masthead: 3.5rem;
+  --gut: 1.25rem;
+
+  color-scheme: light;
 }
+
+/* ── After hours ──────────────────────────────────────────────────────────
+   The same document, not an inverted token set: the bindery green leaves the
+   masthead and becomes the ground, and buff stops being furniture and becomes
+   the ink. */
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #17181a;
-    --fg: #e8e8e6;
-    --muted: #9a9a96;
-    --line: #2e3033;
-    --accent: #7aa9f0;
-    --danger: #f2897f;
+    /* The ground itself is bindery green and the ink goes warm: the same
+       document, printed on the cloth rather than on the board. A near-black
+       field under a grey-white ink is the inverted token set this theme exists
+       not to be — it switches the committed colour off and leaves a generic
+       dark interface with a green sidebar.
+
+       One relationship cannot survive the move. On white board the band stands
+       11:1 clear of the field; on a green ground no green band can. So the band
+       lifts a step and keeps its border, and the separation is carried by the
+       rule rather than by value alone. */
+    --paper: #15271e;
+    --paper-2: #1b3024;
+    --paper-3: #223c2d;
+    --ink: #e8dcbe;
+    --ink-2: #b3ac90;
+    --rule: #2b4433;
+    --rule-2: #43644e;
+
+    --green: #27412f;
+    --green-2: #1b3124;
+    --on-green: #e8dcbe;
+    --on-green-2: #aab79f;
+
+    --buff: #c7a978;
+    --buff-2: #ddc9a4;
+
+    --oxblood: #e6968d;
+    --oxblood-field: #3a201c;
+    --on-oxblood: #3a201c;
+
+    --focus: #ddc9a4;
+    --select-bg: #3c5c47;
+    --select-fg: #e8dcbe;
+
+    color-scheme: dark;
   }
 }
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font: 14px/1.5 system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The surfaces nobody draws still carry the design. Left at their defaults
+   they belong to no design system, and they are the cheapest tell that a page
+   was assembled rather than built. */
+
+::selection {
+  background: var(--select-bg);
+  color: var(--select-fg);
+}
+
+:root {
+  scrollbar-color: var(--rule-2) transparent;
+  scrollbar-width: thin;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+/* On the green rail and masthead the ring has to change ink or it vanishes. */
+.masthead :focus-visible,
+.series :focus-visible,
+.gate :focus-visible {
+  outline-color: var(--buff-2);
 }
 
 a {
-  color: var(--accent);
-  text-decoration: none;
+  color: inherit;
+  text-decoration-color: var(--rule-2);
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
 }
 
 a:hover {
-  text-decoration: underline;
+  text-decoration-color: currentColor;
 }
+
+/* Every figure in this interface is a measurement — a count, an extent, a
+   byte total, a date. They are set in the typed face, condensed, and they line
+   up in their columns because tabular figures are what a ledger is. */
+
+.num,
+.code,
+.extent,
+.stamp,
+.head,
+.meta,
+input[readonly],
+progress + span,
+td.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-stretch: 75%;
+  letter-spacing: 0;
+}
+
+/* ── Controls ───────────────────────────────────────────────────────────── */
 
 button,
 .button {
   font: inherit;
-  padding: 0.35rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--fg);
+  font-family: var(--sans);
+  font-weight: 500;
+  font-stretch: 103%;
+  letter-spacing: 0.01em;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--rule-2);
+  border-radius: 2px;
+  background: var(--paper);
+  color: var(--ink);
   cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 90ms linear, border-color 90ms linear;
+}
+
+button:hover:not(:disabled),
+.button:hover {
+  background: var(--paper-2);
+  border-color: var(--ink-2);
+}
+
+button:active:not(:disabled) {
+  background: var(--paper-3);
 }
 
 button:disabled {
-  opacity: 0.4;
+  color: var(--ink-2);
+  border-color: var(--rule);
+  background: transparent;
   cursor: default;
 }
 
-input {
-  font: inherit;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--fg);
+/* The primary act on each screen is the one that puts material into the
+   collection, or takes it out of one. It is the only filled control in the
+   interface, which is what makes it findable without being loud. */
+.primary:not(:disabled) {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--on-green);
+  text-decoration: none;
 }
+
+.primary:hover:not(:disabled) {
+  background: var(--green-2);
+  border-color: var(--green-2);
+}
+
+@media (prefers-color-scheme: dark) {
+  .primary:not(:disabled) {
+    background: var(--buff);
+    border-color: var(--buff);
+    color: #131a16;
+  }
+
+  .primary:hover:not(:disabled) {
+    background: var(--buff-2);
+    border-color: var(--buff-2);
+  }
+}
+
+/* Restriction. Oxblood appears here and on the trash screen, nowhere else. */
+.destructive:not(:disabled) {
+  color: var(--oxblood);
+  border-color: color-mix(in oklab, var(--oxblood) 40%, var(--rule-2));
+}
+
+.destructive:hover:not(:disabled) {
+  background: var(--oxblood-field);
+  border-color: var(--oxblood);
+}
+
+input,
+select {
+  font: inherit;
+  font-family: var(--sans);
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--rule-2);
+  border-radius: 2px;
+  background: var(--paper);
+  color: var(--ink);
+  caret-color: var(--green);
+  min-width: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  input,
+  select {
+    caret-color: var(--buff-2);
+  }
+}
+
+input::placeholder {
+  color: var(--ink-2);
+}
+
+/* The date field ships a browser's own typography and its own calendar glyph.
+   Left alone they are the one part of a dialog that belongs to no design
+   system — the empty field even announces its format in a face nothing else
+   here uses. */
+input[type='datetime-local'] {
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The face has to be set on each shadow field, not only on the input: the
+   parts do not inherit it, so declaring it once themes the glyph and leaves
+   "dd/mm/yyyy, --:--" sitting there in the browser's own proportional face,
+   beside a column of dates set in the condensed mono. */
+input[type='datetime-local']::-webkit-datetime-edit,
+input[type='datetime-local']::-webkit-datetime-edit-fields-wrapper,
+input[type='datetime-local']::-webkit-datetime-edit-text,
+input[type='datetime-local']::-webkit-datetime-edit-day-field,
+input[type='datetime-local']::-webkit-datetime-edit-month-field,
+input[type='datetime-local']::-webkit-datetime-edit-year-field,
+input[type='datetime-local']::-webkit-datetime-edit-hour-field,
+input[type='datetime-local']::-webkit-datetime-edit-minute-field,
+input[type='datetime-local']::-webkit-datetime-edit-ampm-field {
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+input[type='datetime-local']::-webkit-datetime-edit-text {
+  color: var(--ink-2);
+  padding: 0 0.1em;
+}
+
+input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 90ms linear;
+}
+
+input[type='datetime-local']::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* The glyph is a fixed dark bitmap; inverting is the only handle on it. */
+  input[type='datetime-local']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}
+
+input:focus-visible {
+  border-color: var(--focus);
+}
+
+/* ── The shell ──────────────────────────────────────────────────────────── */
 
 .shell {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  grid-template-rows: var(--masthead) minmax(0, 1fr);
+  grid-template-areas:
+    'masthead masthead'
+    'series   main';
+  height: 100dvh;
 }
 
+/* A share link has no account behind it, so it has no series to index: the
+   masthead sits straight on top of the one thing the visitor was sent. */
+.shell.public {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: var(--masthead) minmax(0, 1fr);
+  grid-template-areas:
+    'masthead'
+    'main';
+}
+
+/* header carries the banner and the series index in the document, and hands
+   both straight to the shell grid: the masthead spans the top, the rail runs
+   the full height beneath it, and they are still one landmark in the markup. */
 header {
+  display: contents;
+}
+
+.masthead {
+  grid-area: masthead;
   display: flex;
-  gap: 1rem;
   align-items: center;
-  padding: 0.6rem 1rem;
-  border-bottom: 1px solid var(--line);
+  gap: 1rem;
+  padding: 0 var(--gut);
+  background: var(--green);
+  color: var(--on-green);
+  border-bottom: 1px solid var(--green-2);
 }
 
-header nav {
-  display: flex;
-  gap: 0.75rem;
-}
-
-header nav a.on {
+.wordmark {
+  font-family: var(--sans);
+  font-size: 1.1rem;
   font-weight: 600;
-  border-bottom: 2px solid var(--accent);
+  font-stretch: 118%;
+  letter-spacing: 0.2em;
+  color: var(--on-green);
+}
+
+.masthead .who {
+  color: var(--on-green-2);
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}
+
+.masthead button {
+  background: transparent;
+  color: var(--on-green);
+  border-color: color-mix(in oklab, var(--on-green) 32%, transparent);
+}
+
+.masthead button:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--on-green) 12%, transparent);
+  border-color: var(--on-green);
+}
+
+/* The survey mark: the reconciler is walking the disk, so every listing on
+   screen is an honestly partial answer and says so rather than implying the
+   index knows something the filesystem does not. */
+.indexing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--buff-2);
+}
+
+.indexing svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
 }
 
 .spacer {
   flex: 1;
+  min-width: 0;
 }
 
-.who,
-.indexing {
-  color: var(--muted);
+/* ── Series index ───────────────────────────────────────────────────────── */
+
+.series {
+  grid-area: series;
+  position: relative;
+  background: var(--green);
+  border-right: 1px solid var(--green-2);
+  padding: var(--series-pad) 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  --series-h: 2.1rem;
+  --series-pad: 0.85rem;
 }
 
-.indexing::before {
-  content: '⟳ ';
+.series a {
+  display: grid;
+  grid-template-columns: 2.1rem 1fr;
+  align-items: center;
+  gap: 0.35rem;
+  height: var(--series-h);
+  padding: 0 var(--gut);
+  text-decoration: none;
+  color: var(--on-green-2);
+  transition: color 90ms linear, background-color 90ms linear;
+}
+
+.series a:hover {
+  color: var(--on-green);
+  background: color-mix(in oklab, var(--on-green) 7%, transparent);
+}
+
+/* The roman numeral is the series number a finding aid prints in its margin,
+   and it is furniture: the plain word beside it is what anyone reads. */
+.series .numeral {
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  color: color-mix(in oklab, var(--on-green-2) 72%, transparent);
+  text-align: right;
+}
+
+.series .label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-stretch: 105%;
+  letter-spacing: 0.015em;
+}
+
+.series a.on {
+  color: var(--on-green);
+  background: color-mix(in oklab, var(--on-green) 9%, transparent);
+}
+
+.series a.on .numeral {
+  color: var(--buff-2);
+}
+
+/* The buff mark that travels down the rail. One element, moved to the active
+   series rather than redrawn on it, which is the single piece of motion the
+   navigation owns. Every entry is exactly --series-h tall, so where the mark
+   belongs is arithmetic and never needs measuring. */
+.series-mark {
+  position: absolute;
+  inset-inline-start: 0;
+  top: calc(var(--series-pad) + var(--at) * var(--series-h));
+  width: 3px;
+  height: var(--series-h);
+  background: var(--buff-2);
+  transition: top 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── The inventory ──────────────────────────────────────────────────────── */
+
+main.browser,
+main.panel {
+  grid-area: main;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--notes);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-areas:
+    'toolbar notes'
+    'alert   notes'
+    'head    notes'
+    'list    notes';
+  min-height: 0;
+  min-width: 0;
 }
 
 .toolbar {
+  grid-area: toolbar;
   display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 0.6rem 1rem;
-  border-bottom: 1px solid var(--line);
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.9rem var(--gut) 0.75rem;
+  border-bottom: 1px solid var(--rule);
 }
 
-.toolbar h1 {
-  font-size: 1.1rem;
-  margin: 0;
+/* The reference head: where you are, stated as a reference code the way an
+   archive states one, with the search that reaches the whole collection
+   beside it rather than hidden behind an icon. */
+.refhead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem 1.25rem;
+  flex-wrap: wrap;
 }
 
 .crumbs {
-  min-width: 12rem;
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.browser,
-.panel {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+.crumbs a {
+  text-decoration: none;
+  color: var(--ink-2);
 }
+
+.crumbs a:last-child,
+.crumbs a:only-child {
+  color: var(--ink);
+}
+
+.crumbs a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--buff);
+}
+
+.crumbs .sep {
+  color: var(--rule-2);
+  padding: 0 0.15rem;
+}
+
+.toolbar h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  font-stretch: 112%;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.search {
+  flex: 1 1 16rem;
+  max-width: 28rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--rule-2);
+  border-radius: 2px;
+  background: var(--paper);
+  min-width: 0;
+}
+
+.search:focus-within {
+  border-color: var(--focus);
+}
+
+.search svg {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-2);
+  flex: none;
+}
+
+.search input {
+  flex: 1;
+  border: 0;
+  background: none;
+  padding: 0.3rem 0;
+  min-width: 0;
+}
+
+.search input:focus-visible {
+  outline: none;
+}
+
+/* Operations, grouped by what they do to the collection: what adds to it,
+   what rearranges or copies out of it, and — set apart, in the restriction
+   ink — what withdraws from it. */
+.ops {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.ops .rule {
+  width: 1px;
+  align-self: stretch;
+  background: var(--rule);
+  margin: 0 0.35rem;
+}
+
+/* ── Column head and container list ─────────────────────────────────────── */
 
 .browser .head,
 .row {
   display: grid;
-  grid-template-columns: 2rem 1fr 7rem 12rem;
-  gap: 0.75rem;
+  grid-template-columns: 3rem 1.75rem minmax(0, 1fr) 6rem 8.5rem;
+  gap: 0.8rem;
   align-items: center;
-  padding: 0 1rem;
+  padding: 0 var(--gut);
 }
 
 .browser .head {
+  grid-area: head;
   padding-block: 0.4rem;
-  color: var(--muted);
-  border-bottom: 1px solid var(--line);
-  grid-template-columns: 1fr 7rem 12rem;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--rule-2);
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-size: 0.62rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  background: var(--paper);
 }
 
-/* The scroll container for the virtualised list. Its height comes from the
-   flex layout, which is what windowOf() measures against. */
+.browser .head .r,
+.row .r {
+  text-align: right;
+}
+
+/* The scroll container for the windowed list. Its height comes from the grid,
+   which is what windowOf() measures against. */
 .rows {
-  flex: 1;
+  grid-area: list;
   min-height: 0;
   overflow-y: auto;
-  /* Not `strict`: size containment would take the height away from the flex
-     layout this element gets it from. */
+  overflow-x: hidden;
+  /* Not `strict`: size containment would take the height away from the grid
+     this element gets it from. */
   contain: layout paint;
 }
 
+/* One row height governs the entire field. No cards, no groups, no row that
+   varies with its content — a hundred thousand entries have to read as one
+   ruled surface, and anything that breaks the metronome breaks the scan. */
 .row {
   cursor: default;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--rule);
   overflow: hidden;
   white-space: nowrap;
+  position: relative;
+  /* Shift-click takes a range of rows. Without this it also drags a text
+     selection across everything in between, which highlights half the listing
+     in the selection colour and copies filenames nobody asked for. */
+  user-select: none;
 }
 
 .row:hover {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
 }
 
+/* Selection is marked the way an archivist marks an entry: a tick in the
+   margin, the ground lifted a step, the title brought up in weight. The mark
+   is the signal, so selection survives a screen that cannot show colour. */
 .row.on {
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  background: var(--paper-3);
+}
+
+.row.on .name {
+  font-weight: 600;
+}
+
+/* The tick an archivist puts in the margin. It is a mark rather than a colour
+   wash, so a selection is still visible to someone who cannot tell the ground
+   from the lifted ground — which means it has to carry its own contrast, in
+   ink rather than in buff, and be big enough to read as a deliberate stroke. */
+.row.on::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0.45rem;
+  top: 50%;
+  translate: 0 -50%;
+  width: 2px;
+  height: 11px;
+  background: var(--ink);
+}
+
+.row .num {
+  color: var(--ink-2);
+  font-size: 0.66rem;
+  text-align: right;
+  letter-spacing: 0.02em;
+}
+
+.row .mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-2);
+}
+
+.row .mark svg {
+  width: 16px;
+  height: 16px;
+}
+
+.row.folder .mark {
+  color: var(--buff);
 }
 
 .row .name,
@@ -179,28 +789,247 @@ td[title] {
   text-overflow: ellipsis;
 }
 
-.icon {
-  width: 28px;
-  height: 28px;
-  object-fit: cover;
-  border-radius: 4px;
-  text-align: center;
+.row .extent,
+.row .stamp {
+  font-size: 0.72rem;
+  color: var(--ink-2);
+  text-align: right;
 }
+
+/* Photographic material carries its contact print in the reference column,
+   at the row's own height. */
+img.icon {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 1px;
+  background: var(--paper-3);
+  display: block;
+}
+
+.row .mark img.icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* ── The notes column ───────────────────────────────────────────────────
+   A finding aid puts its scope, arrangement and access notes beside the
+   inventory, not on top of it. Everything the interface has to say about the
+   listing lives here and stays here: the extent, what is selected, what is
+   arriving, and what is not yet true. Nothing in this column is a toast, and
+   nothing in it shoves the list down the page. */
+
+.notes {
+  grid-area: notes;
+  border-inline-start: 1px solid var(--rule);
+  padding: 0.9rem var(--gut) 1.25rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  min-width: 0;
+}
+
+.notes section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.notes h2 {
+  margin: 0 0 0.1rem;
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.notes p {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 34ch;
+}
+
+/* The extent statement: the number a collection states about itself before
+   anything else. It is the largest type on the page after the masthead. */
+.extent-figure {
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  line-height: 1.15;
+}
+
+.extent-sub {
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+
+/* The breakdown wraps between its clauses and never inside one. Left to itself
+   it breaks wherever the column runs out, which strands a numeral from the
+   noun it counts — "3 / folders" is the one thing an extent may not say. */
+.extent-sub .clause {
+  white-space: nowrap;
+}
+
+.extent-sub .sep {
+  color: var(--rule-2);
+}
+
+/* Text inside the notes column changes far more often than the column does.
+   It crossfades rather than moving, so a count ticking upward never shifts
+   anything around it. */
+@media (prefers-reduced-motion: no-preference) {
+  .notes .live {
+    animation: settle 90ms linear;
+  }
+}
+
+@keyframes settle {
+  from {
+    opacity: 0.35;
+  }
+}
+
+/* A caveat is not an error: it is the aid telling you this description is
+   incomplete. Buff, the colour of the container furniture, never oxblood.
+   A hairline in the margin, at the weight every other rule in the document
+   uses — a 2px accent stripe is a callout bar from a different design system. */
+.caveat {
+  border-inline-start: 1px solid var(--buff);
+  padding-inline-start: 0.7rem;
+}
+
+/* ── Errors and restriction ─────────────────────────────────────────────── */
 
 .note,
 .error {
   margin: 0;
-  padding: 0.5rem 1rem;
-  color: var(--muted);
+  padding: 0.75rem var(--gut);
+  color: var(--ink-2);
+  font-size: 0.82rem;
 }
 
 .error {
-  color: var(--danger);
+  color: var(--oxblood);
 }
 
+/* A refused operation is reported next to the controls that asked for it,
+   between the operations strip and the listing, in the restriction ink.
+   Its grid row collapses to nothing when there is no error to report. */
 .error.bar {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  grid-area: alert;
+  background: var(--oxblood-field);
+  border-bottom: 1px solid color-mix(in oklab, var(--oxblood) 30%, transparent);
   cursor: pointer;
+  font-family: var(--sans);
+}
+
+/* The empty and loading states of the list sit in the list's own area rather
+   than pushing the column head around. */
+/* Seated directly under the column-head rule, in the title column's own left
+   margin, so the ruled surface carries on into the message instead of leaving
+   a rule drawn over nothing and a sentence floating below it. */
+.rows-empty {
+  grid-area: list;
+  margin: 0;
+  padding: 1.15rem var(--gut) 2.5rem calc(var(--gut) + 5.55rem);
+  color: var(--ink-2);
+  font-size: 0.85rem;
+  align-self: start;
+  /* Wide enough that the sentence is not squeezed into a narrow ragged block
+     against a very empty field, and balanced so that when it does take two
+     lines they are the same length rather than one long and one stub. */
+  max-width: 72ch;
+  text-wrap: balance;
+}
+
+.panel .rows-empty {
+  padding-inline-start: var(--gut);
+}
+
+.rows-empty strong {
+  display: block;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-stretch: 108%;
+  font-size: 0.95rem;
+  color: var(--ink);
+  margin-bottom: 0.3rem;
+}
+
+/* ── Tables: the other three series ─────────────────────────────────────── */
+
+.panel .sheet {
+  grid-area: list;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* A one-time reveal — the token secret — takes the column head's row, above
+   the register it is about to join. It is the only thing on any screen that
+   cannot be looked up again, so it is not put in the notes column with the
+   things that can. */
+.reveal {
+  grid-area: head;
+  padding: 1rem var(--gut) 0;
+}
+
+.reveal .card {
+  border-top-color: var(--buff);
+  width: min(38rem, 100%);
+}
+
+/* An entry in one of the register sheets: the same mark-then-title reading
+   order as a row in the container list, so the two never feel like different
+   applications. */
+.entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  text-decoration: none;
+}
+
+.entry:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--buff);
+}
+
+.entry .mark {
+  display: flex;
+  align-items: center;
+  color: var(--ink-2);
+  flex: none;
+}
+
+.entry .mark.folder {
+  color: var(--buff);
+}
+
+.entry .mark svg {
+  width: 15px;
+  height: 15px;
+}
+
+.entry .mark img.icon {
+  width: 20px;
+  height: 20px;
 }
 
 table {
@@ -211,121 +1040,552 @@ table {
 th,
 td {
   text-align: left;
-  padding: 0.4rem 1rem;
-  border-bottom: 1px solid var(--line);
+  padding: 0.55rem var(--gut);
+  border-bottom: 1px solid var(--rule);
   max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-th {
-  color: var(--muted);
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-size: 0.62rem;
   font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--rule-2);
+  z-index: 1;
+}
+
+/* `max-width: 0` above is what lets the title column ellipsize inside a table
+   that has no fixed layout. It has to be lifted again on the measurement
+   columns, or a date renders as "23" and "Never used" renders as "Nev" —
+   a value the interface mangles is a value it is getting wrong. */
+th.num,
+td.num {
+  width: 1%;
+  max-width: none;
+  white-space: nowrap;
+  text-align: right;
+}
+
+td.num {
+  font-size: 0.72rem;
+  color: var(--ink-2);
 }
 
 td.actions {
   white-space: nowrap;
   width: 1%;
   max-width: none;
+  text-align: right;
 }
 
 td.actions button,
 td.actions a {
-  margin-left: 0.5rem;
+  margin-left: 0.4rem;
 }
 
+/* A link whose target has left the collection. It keeps its row and says why,
+   because a link that silently stops working is a link nobody can debug. */
 tr.stale td {
-  color: var(--muted);
+  color: var(--ink-2);
 }
+
+tr.stale em {
+  font-style: normal;
+  color: var(--oxblood);
+}
+
+/* ── Accession register ────────────────────────────────────────────────────
+   Material arriving at the collection, listed while it arrives. It lives in
+   the notes column rather than floating over the listing: an upload that
+   covers the rows you are trying to drop files next to is in the way. */
 
 .uploads {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  width: min(28rem, 90vw);
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.5rem;
 }
 
 .upload {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.25rem 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 0.5rem;
   align-items: center;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg);
-}
-
-.upload progress {
-  grid-column: 1 / -1;
-  width: 100%;
+  font-size: 0.74rem;
 }
 
 .upload .name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--ink);
 }
+
+.upload .meta {
+  font-size: 0.66rem;
+  color: var(--ink-2);
+  text-align: right;
+  letter-spacing: 0.02em;
+}
+
+/* A bar drawn from the palette, not the platform's. The native widget is a
+   different shape and colour in every browser, which is no design system. */
+.upload progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 3px;
+  appearance: none;
+  border: 0;
+  background: var(--paper-3);
+}
+
+.upload progress::-webkit-progress-bar {
+  background: var(--paper-3);
+}
+
+.upload progress::-webkit-progress-value {
+  background: var(--green);
+  transition: inline-size 120ms linear;
+}
+
+.upload progress::-moz-progress-bar {
+  background: var(--green);
+}
+
+@media (prefers-color-scheme: dark) {
+  .upload progress::-webkit-progress-value {
+    background: var(--buff);
+  }
+
+  .upload progress::-moz-progress-bar {
+    background: var(--buff);
+  }
+}
+
+.upload.error .name {
+  color: var(--oxblood);
+}
+
+.upload.error span:not(.name):not(.meta) {
+  color: var(--oxblood);
+  font-size: 0.72rem;
+  grid-column: 1 / -1;
+}
+
+.upload button {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.7rem;
+}
+
+/* ── The record card ────────────────────────────────────────────────────── */
 
 .card {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1.25rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg);
-  max-width: 32rem;
+  gap: 0.85rem;
+  padding: 1.4rem 1.5rem 1.5rem;
+  border: 1px solid var(--rule-2);
+  border-top: 3px solid var(--green);
+  border-radius: 0;
+  background: var(--paper);
+  width: min(30rem, 100%);
 }
 
 .card h1 {
-  font-size: 1.2rem;
   margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-stretch: 112%;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.card p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 48ch;
 }
 
 .card label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.28rem;
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-size: 0.62rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.card label input {
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.card input[readonly] {
+  font-size: 0.72rem;
+  background: var(--paper-2);
+}
+
+.card .row-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ── The gate: sign in, set up, unlock ────────────────────────────────────
+   The one place the committed colour takes the whole surface. Nothing is in
+   the collection yet, so there is no inventory to keep legible — the room is
+   simply closed, and it looks closed. */
+
+.gate {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1.25rem;
+  background: var(--green);
+}
+
+.gate .card {
+  border-color: var(--green-2);
+  border-top-color: var(--buff-2);
+}
+
+.gate .mark {
+  font-family: var(--sans);
+  font-size: 1rem;
+  font-weight: 600;
+  font-stretch: 118%;
+  letter-spacing: 0.2em;
+  color: var(--on-green);
+  text-align: center;
+  margin-bottom: 1rem;
 }
 
 .centred {
-  margin: 4rem auto;
-  align-items: center;
+  margin: 0 auto;
+  max-width: 34rem;
+  padding: 3.5rem 1.25rem;
+  color: var(--ink-2);
 }
 
-.preview {
-  max-width: 100%;
-  max-height: 50vh;
-  object-fit: contain;
-}
+/* ── The plate: full-size viewing ─────────────────────────────────────────
+   Photographic material taken out and looked at. The ground is the room's own
+   green-black rather than pure black, and every word about the item sits on
+   its own plate below the image — never over the pixels it describes. */
 
 .viewer {
   position: fixed;
   inset: 0;
+  z-index: 10;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1rem;
-  background: rgb(0 0 0 / 0.8);
+  padding: 1.5rem;
+  background: color-mix(in srgb, #0b110d 88%, transparent);
 }
 
 .viewer img {
-  max-width: 92vw;
-  max-height: 80vh;
+  max-width: min(92vw, 1400px);
+  max-height: 76dvh;
   object-fit: contain;
+  background: #0b110d;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .viewer img {
+    animation: seat 120ms cubic-bezier(0.2, 0, 0, 1);
+  }
+}
+
+@keyframes seat {
+  from {
+    scale: 0.98;
+    opacity: 0;
+  }
 }
 
 .viewer-bar {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   align-items: center;
-  color: #fff;
+  max-width: 100%;
+  padding: 0.45rem 0.6rem;
+  background: color-mix(in srgb, #0b110d 92%, transparent);
+  border: 1px solid color-mix(in srgb, #e9ddc3 22%, transparent);
+  color: #e9ddc3;
+}
+
+.viewer-bar span {
+  font-family: var(--mono);
+  font-stretch: 75%;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .viewer-bar button {
-  color: #fff;
-  border-color: rgb(255 255 255 / 0.4);
+  color: #e9ddc3;
+  background: transparent;
+  border-color: color-mix(in srgb, #e9ddc3 30%, transparent);
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.45rem;
+}
+
+.viewer-bar button:hover:not(:disabled) {
+  background: color-mix(in srgb, #e9ddc3 14%, transparent);
+  border-color: #e9ddc3;
+}
+
+.viewer-bar button:disabled {
+  color: color-mix(in srgb, #e9ddc3 40%, transparent);
+  border-color: color-mix(in srgb, #e9ddc3 14%, transparent);
+}
+
+.viewer-bar svg {
+  width: 14px;
+  height: 14px;
+}
+
+.viewer :focus-visible {
+  outline-color: #e9ddc3;
+}
+
+/* The share dialog reuses the plate's ground: the same act of taking one item
+   out of the listing to work on it. */
+.viewer .card {
+  max-height: 88dvh;
+  overflow: auto;
+}
+
+/* ── A shared item, seen by someone with no account ─────────────────────── */
+
+/* One file, shared on its own: there is no inventory and no notes column,
+   because the whole collection the visitor can see is this single record. */
+main.panel.single {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'list';
+  place-items: start center;
+  padding: 3rem 1.25rem;
+  overflow: auto;
+}
+
+main.panel.single .card {
+  grid-area: list;
+}
+
+.preview {
+  max-width: 100%;
+  max-height: 46dvh;
+  object-fit: contain;
+  background: var(--paper-2);
+}
+
+/* ── Adaptation ───────────────────────────────────────────────────────────
+   The document reflows the way a printed one would if it were narrower: the
+   notes move above the inventory, and the series index becomes a band under
+   the masthead instead of a rail beside it. The container list keeps its
+   metronome and drops the columns that cost the title its room. */
+
+@media (max-width: 68rem) {
+  :root {
+    --notes: 13rem;
+  }
+}
+
+@media (max-width: 58rem) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--masthead) auto minmax(0, 1fr);
+    grid-template-areas:
+      'masthead'
+      'series'
+      'main';
+  }
+
+  .series {
+    flex-direction: row;
+    padding: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--green-2);
+    overflow-x: auto;
+  }
+
+  .series a {
+    grid-template-columns: auto;
+    height: auto;
+    padding: 0.55rem 0.9rem;
+    white-space: nowrap;
+  }
+
+  .series .numeral {
+    display: none;
+  }
+
+  /* Laid out in a row, the entries are as wide as their words, so the mark
+     can no longer be arithmetic. It goes back to being drawn on the active
+     entry, under it rather than beside it. */
+  .series-mark {
+    display: none;
+  }
+
+  .series a.on {
+    box-shadow: inset 0 -3px 0 var(--buff-2);
+  }
+
+  main.browser,
+  main.panel {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-template-areas:
+      'toolbar'
+      'alert'
+      'notes'
+      'head'
+      'list';
+  }
+
+  .notes {
+    border-inline-start: 0;
+    border-bottom: 1px solid var(--rule);
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    padding: 0.75rem var(--gut);
+    align-items: flex-start;
+  }
+
+  .notes section {
+    flex: 1 1 12rem;
+  }
+
+  .extent-figure {
+    font-size: 1.05rem;
+  }
+}
+
+@media (max-width: 44rem) {
+  :root {
+    --gut: 0.85rem;
+    --masthead: 3.1rem;
+  }
+
+  .browser .head,
+  .row {
+    grid-template-columns: 1.75rem minmax(0, 1fr) 5rem;
+    gap: 0.6rem;
+  }
+
+  /* The ordinal and the timestamp are the two columns a phone cannot afford;
+     the title and the extent are what the screen is for. */
+  .row .num,
+  .browser .head .num,
+  .row .stamp,
+  .browser .head .stamp {
+    display: none;
+  }
+
+  .row.on::before {
+    inset-inline-start: 0.15rem;
+  }
+
+  .toolbar {
+    padding-top: 0.7rem;
+  }
+
+  .ops {
+    gap: 0.3rem;
+  }
+
+  .ops .rule {
+    display: none;
+  }
+
+  .masthead .who {
+    display: none;
+  }
+
+  /* On a phone the notes column sits between the controls and the listing, so
+     every line it holds is a row of the inventory pushed off the screen. The
+     reference prose is the part you can afford to lose: what stays is the
+     extent, anything arriving, and anything not yet true. */
+  .notes {
+    gap: 0.25rem 1rem;
+    padding: 0.55rem var(--gut);
+    align-items: baseline;
+  }
+
+  .notes section.prose {
+    display: none;
+  }
+
+  .notes section {
+    flex: 0 1 auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.5rem;
+  }
+
+  .notes h2 {
+    border-bottom: 0;
+    padding-bottom: 0;
+    margin: 0;
+  }
+
+  .notes .extent-figure {
+    font-size: 0.82rem;
+  }
+
+  /* Each figure stays whole: the breakdown moves to the next line entire
+     rather than stranding its unit down there on its own. */
+  .notes .extent-figure,
+  .notes .extent-sub {
+    white-space: nowrap;
+    text-wrap: nowrap;
+  }
+
+  /* Accessions and caveats stay full width: they are the two things on this
+     screen that are actually changing while you look at it. */
+  .notes section:has(.uploads),
+  .notes section:has(.caveat) {
+    flex: 1 0 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  th,
+  td {
+    padding: 0.5rem 0.6rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }

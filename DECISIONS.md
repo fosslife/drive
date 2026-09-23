@@ -291,3 +291,48 @@ how it got here is worse than no record.
   claims; checking them against a fake would not be checking them.
 - e2e tests that count `.row` elements must account for virtualisation: only a screenful exists in
   the DOM. The fifty-item selection test sets a viewport tall enough to hold fifty rows.
+
+## Interface
+
+- The first iteration's look had no authority: it was "whatever works" while the features were being
+  built, and it was replaced rather than polished. The world it was replaced with is an **archival
+  finding aid** — the document an archive publishes about itself: a collection that states its own
+  extent, is arranged in series, and is described down to the item. It was chosen over a
+  safe-deposit-vault direction, a departure board and a modular-identity system. The durable version
+  of this lives in `DESIGN.md`; the reasoning and the first-viewport contract live in
+  `.impeccable/surfaces/web-src-style-css.md`.
+- The four screens are Series I–IV, but the roman numeral is furniture and the plain word is the
+  label. Families who were handed an account read "Trash", not "Series II". The same rule settled the
+  scan indicator: "Indexing" over the archival "Surveying", because the plainer word is the one a
+  non-technical user already knows.
+- Everything the interface has to say about a listing lives in one notes column beside it — the
+  extent, the selection, uploads in flight, and every caveat — instead of in banners that push the
+  list down the page and toasts that vanish. This is why an upload is an "accession" and why
+  `.uploads` moved out of a fixed overlay: a panel floating over the rows is in the way of the drop
+  target it describes. On phones that column collapses to its live figures and its prose is dropped,
+  because every line it holds up there is a row of the inventory pushed off the screen.
+- Two webfonts are vendored and declared by hand rather than `@import`ed whole. Fontsource ships
+  Cyrillic and Vietnamese cuts; `unicode-range` stops a browser downloading them, but `go:embed`
+  does not read `unicode-range`, so they would sit in every release binary forever. Declaring only
+  the Latin faces dropped 81 KB from the build. Both faces carry a width axis and both use it:
+  Archivo goes expanded for the masthead, Martian Mono goes condensed so the column of reference
+  codes and byte counts leaves the title its room.
+- The emoji the first iteration used for file and folder marks are gone. An emoji is whatever the
+  operating system decides it is — it changes shape per platform, ignores the palette, and cannot
+  take a state. `web/src/icons.jsx` is eight authored marks on one stroke system.
+- Dark mode is the same document after hours, not an inverted token set: the bindery green leaves
+  the masthead and becomes the ground, buff becomes the ink. The first attempt printed the masthead
+  *darker* than the paper, which deleted the committed colour and left a generic near-black
+  interface; the band has to lift off the ground, the way ink does when the paper inverts.
+- `.row` carries `user-select: none`. Shift-click takes a range of rows, and without it the same
+  gesture drags a text selection across every row in between.
+- The redesign changed markup and CSS and deliberately changed no behaviour: `window.prompt`/
+  `confirm`, the router, the virtualised list and every API call are untouched. The acceptance suite
+  is the contract that proves it, so every selector it binds survived the rewrite —
+  `header nav`, `.toolbar button`, `.row`/`.row .name`/`.row img.icon`/`.row.on`, `.rows`, `.card`,
+  `form.card`, `.panel`, `.browser`, `table tbody tr`, `td.actions`, `.uploads`/`.upload progress`,
+  `.viewer`/`.viewer-bar span`, `.error.bar`, `.indexing`. Two of its assertions are on wording
+  ("indexing", "Still indexing"); both were kept, and both readings are the better copy anyway.
+- `web/e2e/shots.mjs` drives the real binary in real Chrome and captures every screen at two
+  viewports in both themes. It is not a test and `npm run test:e2e` does not pick it up (that glob is
+  `e2e/*.test.js`) — it exists so a design change can be looked at rather than imagined.

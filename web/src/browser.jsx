@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, href } from './api.js'
-import { formatDate, formatSize, isImage, splitExtension } from './format.js'
+import { extentParts, formatDate, formatSize, isImage, splitExtension } from './format.js'
+import { Cross, Folder, Glass, Left, Plate, Right, Sheet } from './icons.jsx'
 import { ShareDialog } from './panels.jsx'
 import { uploadFile } from './upload.js'
 import { ROW_HEIGHT, windowOf } from './virtual.js'
@@ -70,6 +71,24 @@ function useListing(path, query) {
   const reload = useCallback(() => setEpoch((n) => n + 1), [])
 
   return { ...state, error, setError, more, reload }
+}
+
+// What a collection says about itself before anything else: how much of it
+// there is. It counts what has actually been listed, and says so when that is
+// less than what is there — an extent that quietly reports a page as the whole
+// folder is the index claiming to know something the disk has not been asked.
+function extentOf(entries) {
+  let files = 0
+  let folders = 0
+  let bytes = 0
+  for (const e of entries) {
+    if (e.kind === 'folder') folders++
+    else {
+      files++
+      bytes += e.size || 0
+    }
+  }
+  return { files, folders, bytes }
 }
 
 export function Browser({ route, navigate }) {
@@ -222,6 +241,8 @@ export function Browser({ route, navigate }) {
   )
 
   const images = useMemo(() => entries.filter(isImage), [entries])
+  const extent = useMemo(() => extentOf(entries), [entries])
+  const picked = useMemo(() => extentOf(chosen), [chosen])
 
   return (
     <main
@@ -251,24 +272,32 @@ export function Browser({ route, navigate }) {
           {listing.error}
         </p>
       )}
-      {listing.indexing && <p className="note">Still indexing — this folder may be missing files that exist on disk.</p>}
-      {listing.truncated && <p className="note">More files match than fit on one page. Narrow the search.</p>}
 
       <div className="head">
-        <span>Name</span>
-        <span>Size</span>
-        <span>Modified</span>
+        <span className="num" title="Position in this listing">
+          №
+        </span>
+        <span aria-hidden="true" />
+        <span>Title</span>
+        <span className="extent r">Extent</span>
+        <span className="stamp r">Modified</span>
       </div>
 
       {listing.loading ? (
-        <p className="note">Loading…</p>
+        <p className="rows-empty">Reading the inventory…</p>
       ) : entries.length === 0 ? (
-        <p className="note">{query ? 'Nothing matched.' : 'This folder is empty. Drop files here to upload.'}</p>
+        <p className="rows-empty">
+          <strong>{query ? 'Nothing in the collection matches.' : 'This folder holds nothing yet.'}</strong>
+          {query
+            ? 'Search reads filenames across everything you own, including folders you have not opened.'
+            : 'Drop files anywhere on this page to deposit them here, or use Upload above.'}
+        </p>
       ) : (
         <VirtualList count={entries.length} onNearEnd={listing.more} onBlankClick={clearSelection}>
           {(i) => (
             <Row
               key={entries[i].id}
+              ordinal={i + 1}
               entry={entries[i]}
               showPath={!!query}
               selected={selected.has(entries[i].id)}
@@ -279,7 +308,18 @@ export function Browser({ route, navigate }) {
         </VirtualList>
       )}
 
-      <Uploads uploads={uploads} onDismiss={(id) => setUploads((prev) => prev.filter((u) => u.id !== id))} />
+      <Notes
+        query={query}
+        extent={extent}
+        picked={picked}
+        partial={!!listing.next}
+        loading={listing.loading}
+        indexing={listing.indexing}
+        truncated={listing.truncated}
+        uploads={uploads}
+        onDismiss={(id) => setUploads((prev) => prev.filter((u) => u.id !== id))}
+      />
+
       {viewing && <Viewer entry={viewing} images={images} onView={setViewing} onClose={() => setViewing(null)} />}
       {sharing && <ShareDialog entry={sharing} onClose={() => setSharing(null)} />}
     </main>
@@ -294,64 +334,183 @@ function Toolbar({ path, query, navigate, chosen, onNewFolder, onRename, onMove,
   const crumbs = path ? path.split('/') : []
   return (
     <div className="toolbar">
-      <div className="crumbs">
-        <a href="/" onClick={(e) => (e.preventDefault(), navigate('/'))}>
-          Home
-        </a>
-        {crumbs.map((name, i) => {
-          const to = crumbs.slice(0, i + 1).join('/')
-          return (
-            <span key={to}>
-              {' / '}
-              <a href={`/browse/${to}`} onClick={(e) => (e.preventDefault(), navigate(`/browse/${encodeURIComponent(to)}`))}>
-                {name}
-              </a>
-            </span>
-          )
-        })}
+      <div className="refhead">
+        {/* The path, stated as the reference code of what is on screen. */}
+        <div className="crumbs">
+          <a href="/" onClick={(e) => (e.preventDefault(), navigate('/'))}>
+            Top level
+          </a>
+          {crumbs.map((name, i) => {
+            const to = crumbs.slice(0, i + 1).join('/')
+            return (
+              <span key={to}>
+                <span className="sep">/</span>
+                <a href={`/browse/${to}`} onClick={(e) => (e.preventDefault(), navigate(`/browse/${encodeURIComponent(to)}`))}>
+                  {name}
+                </a>
+              </span>
+            )
+          })}
+        </div>
+
+        {/* 13.7: search is scoped to the whole of the signed-in user's drive, and
+            its results carry the full path because that is the answer. */}
+        <form
+          className="search"
+          onSubmit={(e) => {
+            e.preventDefault()
+            navigate(term ? `/?q=${encodeURIComponent(term)}` : '/')
+          }}
+        >
+          <Glass />
+          <input
+            placeholder="Search every filename you own"
+            aria-label="Search every filename you own"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+          />
+        </form>
       </div>
 
-      {/* 13.7: search is scoped to the whole of the signed-in user's drive, and
-          its results carry the full path because that is the answer. */}
-      <form
-        className="search"
-        onSubmit={(e) => {
-          e.preventDefault()
-          navigate(term ? `/?q=${encodeURIComponent(term)}` : '/')
-        }}
-      >
-        <input placeholder="Search filenames" value={term} onChange={(e) => setTerm(e.target.value)} />
-      </form>
-
-      <span className="spacer" />
-      <input
-        type="file"
-        multiple
-        hidden
-        ref={picker}
-        onChange={(e) => {
-          onUpload([...e.target.files])
-          e.target.value = ''
-        }}
-      />
-      <button onClick={() => picker.current.click()}>Upload</button>
-      <button onClick={onNewFolder}>New folder</button>
-      <button disabled={chosen.length !== 1} onClick={onRename}>
-        Rename
-      </button>
-      <button disabled={!chosen.length} onClick={onMove}>
-        Move
-      </button>
-      <button disabled={!chosen.length} onClick={onDownload}>
-        Download
-      </button>
-      <button disabled={chosen.length !== 1} onClick={onShare}>
-        Share
-      </button>
-      <button disabled={!chosen.length} onClick={onDelete}>
-        Delete
-      </button>
+      {/* Grouped by what each does to the collection: what adds to it, what
+          rearranges or copies out of it, and — set apart — what withdraws. */}
+      <div className="ops">
+        <input
+          type="file"
+          multiple
+          hidden
+          ref={picker}
+          onChange={(e) => {
+            onUpload([...e.target.files])
+            e.target.value = ''
+          }}
+        />
+        <button className="primary" onClick={() => picker.current.click()}>
+          Upload
+        </button>
+        <button onClick={onNewFolder}>New folder</button>
+        <span className="rule" aria-hidden="true" />
+        <button disabled={chosen.length !== 1} onClick={onRename}>
+          Rename
+        </button>
+        <button disabled={!chosen.length} onClick={onMove}>
+          Move
+        </button>
+        <button disabled={!chosen.length} onClick={onDownload}>
+          Download
+        </button>
+        <button disabled={chosen.length !== 1} onClick={onShare}>
+          Share
+        </button>
+        <span className="rule" aria-hidden="true" />
+        <button className="destructive" disabled={!chosen.length} onClick={onDelete}>
+          Delete
+        </button>
+      </div>
     </div>
+  )
+}
+
+// Each clause of an extent breakdown is kept whole on its line: the column is
+// narrow enough that an unaided wrap strands a numeral from its noun.
+const Clauses = ({ of }) => (
+  <p className="extent-sub live">
+    {extentParts(of).map((clause, i) => (
+      <span key={clause}>
+        {i > 0 && <span className="sep"> · </span>}
+        <span className="clause">{clause}</span>
+      </span>
+    ))}
+  </p>
+)
+
+// The notes column. Everything the interface has to say about the listing is
+// said here and only here: what is on screen, what is selected, what is
+// arriving, and what is not yet true. Nothing in it vanishes on a timer and
+// nothing in it pushes the inventory down the page.
+function Notes({ query, extent, picked, partial, loading, indexing, truncated, uploads, onDismiss }) {
+  const total = extent.files + extent.folders
+  return (
+    <aside className="notes" aria-label="Scope and content">
+      <section>
+        <h2>{query ? 'Results' : 'Extent'}</h2>
+        {loading ? (
+          <p className="extent-sub">Counting…</p>
+        ) : (
+          <>
+            <p className="extent-figure live">
+              {total.toLocaleString()} {query ? (total === 1 ? 'result' : 'results') : total === 1 ? 'item' : 'items'}
+              {partial ? ' so far' : ''}
+            </p>
+            <Clauses of={extent} />
+          </>
+        )}
+        {partial && <p>The rest of this folder is listed as you scroll.</p>}
+      </section>
+
+      {picked.files + picked.folders > 0 && (
+        <section>
+          <h2>Selected</h2>
+          <p className="extent-figure live">
+            {(picked.files + picked.folders).toLocaleString()}{' '}
+            {picked.files + picked.folders === 1 ? 'item' : 'items'}
+          </p>
+          <Clauses of={picked} />
+        </section>
+      )}
+
+      {/* Accessions: material on its way into the collection, listed while it
+          arrives rather than floating over the rows it is about to join. */}
+      {uploads.length > 0 && (
+        <section>
+          <h2>Accessions</h2>
+          <div className="uploads">
+            {uploads.map((u) => (
+              <div key={u.id} className={u.error ? 'upload error' : 'upload'}>
+                <span className="name" title={u.name}>
+                  {u.name}
+                </span>
+                {u.error ? (
+                  <>
+                    <button onClick={() => onDismiss(u.id)}>Dismiss</button>
+                    <span>{u.error}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="meta">
+                      {formatSize(u.sent)} / {formatSize(u.size)}
+                    </span>
+                    <progress value={u.sent} max={u.size} />
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(indexing || truncated) && (
+        <section>
+          <h2>Incomplete description</h2>
+          {indexing && (
+            <p className="caveat">
+              Still indexing. The reconciler has not finished walking the disk, so this folder may be missing files
+              that exist on it.
+            </p>
+          )}
+          {truncated && <p className="caveat">More files match than fit on one page. Narrow the search.</p>}
+        </section>
+      )}
+
+      <section className="prose">
+        <h2>Arrangement</h2>
+        <p>
+          {query
+            ? 'Results are listed with the full path of each item, because where a file sits is the answer to a search.'
+            : 'Folders and files as they sit on disk, in the order the filesystem holds them. Nothing here is a copy: the paths are real.'}
+        </p>
+      </section>
+    </aside>
   )
 }
 
@@ -393,75 +552,72 @@ function VirtualList({ count, onNearEnd, onBlankClick, children }) {
   )
 }
 
-function Row({ entry, selected, showPath, onSelect, onOpen }) {
+// One entry of the container list. Every row is this shape and this height —
+// the metronome is what lets a hundred thousand of them read as one ruled
+// surface instead of a hundred thousand objects.
+function Row({ entry, ordinal, selected, showPath, onSelect, onOpen }) {
+  const folder = entry.kind === 'folder'
   return (
     <div
-      className={`row${selected ? ' on' : ''}`}
+      className={`row${selected ? ' on' : ''}${folder ? ' folder' : ''}`}
       style={{ height: ROW_HEIGHT }}
       onClick={onSelect}
       onDoubleClick={onOpen}
       onKeyDown={(e) => e.key === 'Enter' && onOpen()}
       tabIndex={0}
       role="button"
+      aria-pressed={selected}
     >
-      <Thumb entry={entry} />
+      {/* The position a finding aid prints in its margin. It is also the
+          fastest way for two people to talk about the same row. */}
+      <span className="num">{ordinal.toLocaleString()}</span>
+      <Mark entry={entry} />
       <span className="name" title={entry.path}>
         {showPath ? entry.path : entry.name}
       </span>
-      <span>{entry.kind === 'folder' ? '' : formatSize(entry.size)}</span>
-      <span>{formatDate(entry.modified)}</span>
+      <span className="extent" title={folder ? 'Open the folder for its extent' : undefined}>
+        {folder ? '—' : formatSize(entry.size)}
+      </span>
+      <span className="stamp">{formatDate(entry.modified)}</span>
     </div>
   )
 }
 
 // 13.5: `loading="lazy"` is the whole asynchronous story — the browser fetches
 // the thumbnail when the row is near the viewport and never blocks a render on
-// it. A file with no thumbnail answers 415 and keeps its icon.
-function Thumb({ entry }) {
+// it. A file with no thumbnail answers 415 and keeps its mark.
+function Mark({ entry }) {
   const [failed, setFailed] = useState(false)
-  if (entry.kind === 'folder') return <span className="icon">📁</span>
-  if (failed || !isImage(entry)) return <span className="icon">📄</span>
+  const image = isImage(entry)
   return (
-    <img
-      className="icon"
-      loading="lazy"
-      decoding="async"
-      alt=""
-      src={href('/api/thumb', entry.path)}
-      onError={() => setFailed(true)}
-    />
-  )
-}
-
-function Uploads({ uploads, onDismiss }) {
-  if (!uploads.length) return null
-  return (
-    <div className="uploads">
-      {uploads.map((u) => (
-        <div key={u.id} className={u.error ? 'upload error' : 'upload'}>
-          <span className="name">{u.name}</span>
-          {u.error ? (
-            <>
-              <span>{u.error}</span>
-              <button onClick={() => onDismiss(u.id)}>Dismiss</button>
-            </>
-          ) : (
-            <>
-              <progress value={u.sent} max={u.size} />
-              <span>
-                {formatSize(u.sent)} / {formatSize(u.size)}
-              </span>
-            </>
-          )}
-        </div>
-      ))}
-    </div>
+    <span className="mark">
+      {entry.kind === 'folder' ? (
+        <Folder />
+      ) : !image ? (
+        <Sheet />
+      ) : failed ? (
+        <Plate />
+      ) : (
+        <img
+          className="icon"
+          loading="lazy"
+          decoding="async"
+          alt=""
+          src={href('/api/thumb', entry.path)}
+          onError={() => setFailed(true)}
+        />
+      )}
+    </span>
   )
 }
 
 // 13.11: full-size viewing in place, with the folder's other images either side
 // of it. The image is served by the same endpoint a download uses, under the
 // same access rules; the server decides it may render inline, not this.
+//
+// Everything said about the item sits on its own plate below the image rather
+// than over it: type laid directly on a photograph is legible against some
+// photographs and against no others.
 export function Viewer({ entry, images, onView, onClose, src }) {
   const at = images.findIndex((e) => e.id === entry.id)
   const step = useCallback(
@@ -484,19 +640,26 @@ export function Viewer({ entry, images, onView, onClose, src }) {
 
   return (
     <div className="viewer" onClick={onClose}>
+      <img
+        key={entry.id}
+        src={src ? src(entry) : href('/api/download', entry.path)}
+        alt={entry.name}
+        onClick={(e) => e.stopPropagation()}
+      />
       <div className="viewer-bar" onClick={(e) => e.stopPropagation()}>
-        <button disabled={at <= 0} onClick={() => step(-1)}>
-          ←
-        </button>
-        <span>
-          {entry.name} ({at + 1} of {images.length})
+        <span title={entry.name}>
+          {entry.name} · {at + 1} of {images.length}
         </span>
-        <button disabled={at >= images.length - 1} onClick={() => step(1)}>
-          →
+        <button disabled={at <= 0} onClick={() => step(-1)} aria-label="Previous image">
+          <Left />
         </button>
-        <button onClick={onClose}>Close</button>
+        <button disabled={at >= images.length - 1} onClick={() => step(1)} aria-label="Next image">
+          <Right />
+        </button>
+        <button onClick={onClose} aria-label="Close">
+          <Cross />
+        </button>
       </div>
-      <img src={src ? src(entry) : href('/api/download', entry.path)} alt={entry.name} onClick={(e) => e.stopPropagation()} />
     </div>
   )
 }

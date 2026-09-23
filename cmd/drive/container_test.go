@@ -32,7 +32,10 @@ func TestContainerImageServesFromAMountedDataDirectory(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Minute)
 	defer cancel()
-	engineRun(ctx, t, engine, "build", "-t", image, "-f", "Containerfile", repo)
+	// Named absolutely rather than as a bare filename: -f resolves against the
+	// working directory, which for this test is the package directory, and the
+	// two engines disagree about whether to then retry it against the context.
+	engineRun(ctx, t, engine, "build", "-t", image, "-f", filepath.Join(repo, "Dockerfile"), repo)
 	t.Cleanup(func() { exec.Command(engine, "rmi", "-f", image).Run() })
 
 	data := t.TempDir()

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { api } from './api.js'
 import { Browser } from './browser.jsx'
+import { Survey } from './icons.jsx'
 import { Shares, Tokens, Trash } from './panels.jsx'
 import { SharePage } from './share.jsx'
 
@@ -39,18 +40,23 @@ export function App() {
   if (path.startsWith('/s/')) return <SharePage token={decodeURIComponent(path.slice(3))} />
   if (path === '/setup') return <Setup navigate={navigate} onDone={setUser} />
 
-  if (user === undefined) return <p className="centred">Loading…</p>
+  if (user === undefined) return <p className="centred">Opening the collection…</p>
   if (!user) return <Login onDone={setUser} />
 
   return <Shell user={user} route={route} navigate={navigate} onSignedOut={() => setUser(null)} />
 }
 
+// The four series of the collection. The roman numeral is the furniture a
+// finding aid prints in its margin; the plain word beside it is what anyone
+// actually reads, and it stays the word the rest of the interface uses.
 const tabs = [
-  ['/', 'Files'],
-  ['/trash', 'Trash'],
-  ['/shares', 'Shares'],
-  ['/tokens', 'API tokens'],
+  ['/', 'I', 'Files'],
+  ['/trash', 'II', 'Trash'],
+  ['/shares', 'III', 'Shares'],
+  ['/tokens', 'IV', 'API tokens'],
 ]
+
+const isCurrent = (to, path) => (to === '/' ? path === '/' || path.startsWith('/browse') : path === to)
 
 function Shell({ user, route, navigate, onSignedOut }) {
   const path = route.split('?')[0]
@@ -65,29 +71,41 @@ function Shell({ user, route, navigate, onSignedOut }) {
   else if (path === '/shares') screen = <Shares navigate={navigate} />
   else if (path === '/tokens') screen = <Tokens />
 
+  const at = tabs.findIndex(([to]) => isCurrent(to, path))
+
   return (
     <div className="shell">
       <header>
-        <strong>drive</strong>
-        <nav>
-          {tabs.map(([to, label]) => (
-            <a
-              key={to}
-              href={to}
-              className={to === '/' ? (path.startsWith('/browse') || path === '/' ? 'on' : '') : path === to ? 'on' : ''}
-              onClick={(e) => {
-                e.preventDefault()
-                navigate(to)
-              }}
-            >
-              {label}
-            </a>
-          ))}
+        <div className="masthead" role="banner">
+          <span className="wordmark">drive</span>
+          <span className="spacer" />
+          <Indexing />
+          <span className="who">{user.username}</span>
+          <button onClick={signOut}>Sign out</button>
+        </div>
+        <nav className="series" aria-label="Series">
+          <span className="series-mark" style={{ '--at': Math.max(0, at) }} aria-hidden="true" />
+          {tabs.map(([to, numeral, label]) => {
+            const on = isCurrent(to, path)
+            return (
+              <a
+                key={to}
+                href={to}
+                className={on ? 'on' : ''}
+                aria-current={on ? 'page' : undefined}
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigate(to)
+                }}
+              >
+                <span className="numeral" aria-hidden="true">
+                  {numeral}
+                </span>
+                <span className="label">{label}</span>
+              </a>
+            )
+          })}
         </nav>
-        <span className="spacer" />
-        <Indexing />
-        <span className="who">{user.username}</span>
-        <button onClick={signOut}>Sign out</button>
       </header>
       {screen}
     </div>
@@ -97,6 +115,10 @@ function Shell({ user, route, navigate, onSignedOut }) {
 // 13.12: while a scan is running a listing is a partial answer, and saying so is
 // the difference between "you have no files" and "not indexed yet". It polls
 // only while indexing, so a settled instance makes no requests at all.
+//
+// This is the whole collection being surveyed, which is why it sits in the
+// masthead rather than in one screen's notes: it is true of every listing on
+// screen, not just the folder in front of you.
 function Indexing() {
   const [status, setStatus] = useState(null)
   useEffect(() => {
@@ -118,8 +140,9 @@ function Indexing() {
   if (!status?.indexing) return null
   return (
     <span className="indexing" title="Listings and search may be incomplete until this finishes">
-      Indexing… {status.seen.toLocaleString()} entries
-      {status.root ? ` in ${status.root}` : ''}
+      <Survey />
+      Indexing {status.seen.toLocaleString()}
+      {status.root ? ` · ${status.root}` : ''}
     </span>
   )
 }
@@ -128,31 +151,35 @@ function Credentials({ title, action, error, busy, onSubmit, children }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   return (
-    <form
-      className="card centred"
-      onSubmit={(e) => {
-        e.preventDefault()
-        onSubmit(username, password)
-      }}
-    >
-      <h1>{title}</h1>
-      {children}
-      <label>
-        Username
-        <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
-      </label>
-      <label>
-        Password
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-        />
-      </label>
-      {error && <p className="error">{error}</p>}
-      <button disabled={busy}>{busy ? 'Working…' : action}</button>
-    </form>
+    <div className="gate">
+      <form
+        className="card"
+        onSubmit={(e) => {
+          e.preventDefault()
+          onSubmit(username, password)
+        }}
+      >
+        <h1>{title}</h1>
+        {children}
+        <label>
+          Username
+          <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+        </label>
+        {error && <p className="error">{error}</p>}
+        <button className="primary" disabled={busy}>
+          {busy ? 'Working…' : action}
+        </button>
+      </form>
+    </div>
   )
 }
 
@@ -210,13 +237,15 @@ function Setup({ navigate, onDone }) {
   if (open === undefined) return <p className="centred">Checking the setup link…</p>
   if (!open) {
     return (
-      <div className="card centred">
-        <h1>Setup is closed</h1>
-        <p className="error">{error}</p>
-        <p>
-          If this drive has no administrator yet, restart it and use the link it prints. Otherwise{' '}
-          <a href="/">sign in</a>.
-        </p>
+      <div className="gate">
+        <div className="card">
+          <h1>Setup is closed</h1>
+          <p className="error">{error}</p>
+          <p>
+            If this drive has no administrator yet, restart it and use the link it prints. Otherwise{' '}
+            <a href="/">sign in</a>.
+          </p>
+        </div>
       </div>
     )
   }

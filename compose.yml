@@ -1,4 +1,14 @@
-# podman compose up -d   (or docker compose; the file is the same)
+# podman compose up -d           (or docker compose; the file is the same)
+# podman compose up -d --build   after changing any source
+#
+# `up` runs the image it already has and builds only when there is none, so
+# without --build a source change is invisible and the container goes on
+# serving the previous build. `down -v` does not fix that: it destroys the data
+# volume — your files, your accounts — and leaves the stale image in place.
+#
+# The build file is named Dockerfile, not the podman-native Containerfile,
+# because Compose implementations only look for Dockerfile. `podman build`
+# takes Dockerfile as a fallback, so this one name works everywhere.
 #
 # One service, one volume, one port. If a second service ever appears here,
 # something has gone wrong with the architecture rather than with this file.

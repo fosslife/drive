@@ -14,7 +14,34 @@ export const formatSize = (bytes) => {
   return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${units[i]}`
 }
 
-export const formatDate = (iso) => new Date(iso).toLocaleString()
+// A listing is scanned, not read, and "23/09/2026, 11:49:02" on every row is
+// twelve characters of noise around the two that differ. Inside the current
+// year the time is what distinguishes two files; outside it, the year is.
+export const formatDate = (iso) => {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return ''
+  const thisYear = at.getFullYear() === new Date().getFullYear()
+  const day = at.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    ...(thisYear ? {} : { year: 'numeric' }),
+  })
+  if (!thisYear) return day
+  return `${day}, ${at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+}
+
+// The sub-line of an extent statement, as its separate clauses: how the count
+// breaks down, with the parts that are zero left out rather than printed as
+// zero. It is returned unjoined so each clause can be kept whole on one line —
+// a figure split from its noun ("3 / folders") is the one thing an extent
+// statement must never do.
+export const extentParts = ({ files, folders, bytes }) => {
+  const parts = []
+  if (files) parts.push(`${files.toLocaleString()} ${files === 1 ? 'file' : 'files'}`)
+  if (folders) parts.push(`${folders.toLocaleString()} ${folders === 1 ? 'folder' : 'folders'}`)
+  if (bytes || !parts.length) parts.push(formatSize(bytes))
+  return parts
+}
 
 // The server's inline allowlist from task 7.8: the raster types a browser
 // renders without a scripting context. Anything else is a download, so nothing

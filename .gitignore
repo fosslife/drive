@@ -1,3 +1,7 @@
 /drive
 /data/
 /dist/
+
+# Screenshots the design review captures; the surface brief beside them is kept.
+/.impeccable/review/
+/.impeccable/questions/

@@ -1,0 +1,40 @@
+# Everything here is sent to the build daemon before the first instruction
+# runs, so this file is about what the image build genuinely needs: the Go
+# source, the web source, and the two manifests. Nothing else.
+#
+# Two of these are correctness, not speed. Read the Dockerfile alongside it.
+
+# The drive's own data: files, index.db, trash, thumbnails, certificates. It is
+# bind-mounted at run time and has no business in a build context — on a real
+# instance this is the largest directory on the machine, and shipping a copy of
+# someone's private files into an image layer is the worst outcome in this file.
+/data/
+
+# Installed for the host. The web stage runs `npm ci` against the manifests and
+# then copies web/ over the top, so a host node_modules would bury the
+# freshly-installed one — and these are platform-specific binaries: the host is
+# glibc, the build image is Alpine musl, and esbuild would refuse to run.
+web/node_modules/
+node_modules/
+
+# Built by the web stage inside the image and copied into the Go stage from
+# there. A host copy would be overwritten anyway; excluding it keeps a stale
+# local build from ever being a question.
+web/dist/
+
+# Release artifacts from scripts/release.sh, and a local `go build` output.
+/dist/
+/drive
+
+# History, tooling, and design records. None of it compiles.
+.git/
+.gitignore
+.dockerignore
+.claude/
+.serena/
+.impeccable/
+openspec/
+
+# Tests that never run inside the image. The Go ones have to stay: they sit in
+# the same packages as the code and `go build` still parses the directory.
+web/e2e/
