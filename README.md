@@ -1,21 +1,32 @@
-# drive
+<h1 align="center">drive</h1>
 
-A self-hosted drive: browse, upload, share, and search your own files from a browser, from one
-binary with no configuration.
+<p align="center">
+  Your own drive, in one binary. Browse, upload, share, and search your files from a browser —
+  with no configuration, no database server, and no lock-in.
+</p>
 
-**The filesystem is the source of truth.** Your files are ordinary files at the paths you gave them,
-under `users/<username>/`. Open them over SSH, back them up with `rsync`, edit them from another
-program — the drive notices and catches up. The SQLite index is a disposable cache of what is on
-disk; delete it and it rebuilds. Nothing here stores your data in a format only this program reads.
+<p align="center">
+  <img src="docs/screenshots/files.png" alt="The file listing: folders, files, thumbnails, and a panel explaining what you are looking at" width="100%">
+</p>
 
-## Run it
+## Why this one
+
+- **One file to run.** Download the binary, run it, open the URL it prints. That is the install.
+- **Your files stay files.** They live at `users/<name>/` at the paths you gave them. Open them over
+  SSH, back them up with `rsync`, edit them from another program — the drive notices and catches up.
+- **Nothing is stored in a private format.** The SQLite index is a disposable cache of what is on
+  disk. Delete it and it rebuilds.
+- **Only "delete forever" destroys anything.** Overwrites and deletes go through trash first.
+- **HTTPS by typing your domain name.** One variable, a real Let's Encrypt certificate, auto-renewed.
+
+## Get started
 
 ```sh
 ./drive
 ```
 
-That is the whole setup. It picks a data directory, creates it, starts on `:8080`, and prints the
-URL for creating the first account:
+That is the whole setup. It picks a data directory, creates it, starts on `:8080`, and prints a
+one-time URL for creating your account:
 
 ```
 WARN  serving plaintext HTTP on an address other than localhost: anyone on this network can
@@ -26,47 +37,60 @@ WARN  no account exists yet: open this URL to create the first administrator
       url="http://localhost:8080/setup?token=cQgFFHLQk87H96Np97C09UqaloejjZMkEXYVFPl3tsg"
 ```
 
-Open that URL. The token works once, survives restarts until you use it, and the setup page stops
-existing the moment the first administrator exists. Everything after that is done in the interface.
+Open it, pick a username and password, and you are in. The token works once, survives restarts
+until you use it, and the setup page stops existing the moment the first administrator exists.
 
-The first warning is the default listener accepting from the whole network in plaintext. Fix it by
-reading on, or silence it for a local try-out with `DRIVE_ADDR=127.0.0.1:8080`.
+> **About that warning.** The default listener accepts from the whole network in plaintext. Turn on
+> HTTPS below, or for a quick local try-out silence it with `DRIVE_ADDR=127.0.0.1:8080`.
 
-### With HTTPS
+### Turn on HTTPS
 
-Name the drive, and it gets a real certificate from Let's Encrypt and renews it:
+Name the drive and it gets a real certificate from Let's Encrypt and renews it:
 
 ```sh
 DRIVE_HOSTNAME=drive.example.com DRIVE_ACME_EMAIL=you@example.com ./drive
 ```
 
-The name must already resolve to the machine, and the CA must be able to reach it from the internet
-on port 80 or 443 to check that you own it. The default address becomes `:443` on its own. The
-certificate is obtained before the port opens, so a drive that cannot get one fails at startup with
-the reason rather than serving broken handshakes.
+The name must already point at the machine, and the CA must be able to reach it from the internet
+on port 80 or 443 to check that you own it. The listen address becomes `:443` on its own, and the
+certificate is obtained *before* the port opens — a drive that cannot get one fails at startup with
+the reason instead of serving broken handshakes.
 
-Leave `DRIVE_HOSTNAME` unset and the drive serves plaintext and generates no certificate of any
-kind. It will never sign one for itself: a browser warning on first run is not security. Plaintext
-is the right answer behind a proxy that terminates TLS, on a Tailscale address, or on loopback; if
-you serve plaintext on a network-reachable address it warns at every start, naming what is exposed.
+Leave `DRIVE_HOSTNAME` unset and it serves plaintext and generates no certificate of any kind. It
+will never sign one for itself: a browser warning on first run is not security. Plaintext is the
+right answer behind a proxy that terminates TLS, on a Tailscale address, or on loopback.
 
-### In a container
+### Or run it in a container
 
 ```sh
-podman compose up -d             # or docker compose, the file is the same
-podman compose up -d --build     # after changing any source: see below
+podman compose up -d             # docker compose works too, the file is the same
+podman compose up -d --build     # after changing any source
 ```
 
-One service, one volume, one port. The image is built from `Dockerfile` and contains the same
-static binary and nothing else — no runtime, no database server, no web server.
+One service, one volume, one port. The image contains the same static binary and nothing else — no
+runtime, no database server, no web server.
+
+<details>
+<summary>Why <code>--build</code>, and why the file is named <code>Dockerfile</code></summary>
+
+`up` starts the image it already has and only builds when there is none, so after changing any
+source, pass `--build` or the container will faithfully serve the previous version. `down -v` will
+not help — it deletes your data volume and leaves the stale image untouched.
 
 The build file is called `Dockerfile` rather than `Containerfile` because that is the name every
 tool agrees on: Compose only ever looks for `Dockerfile`, while `podman build` accepts it as a
 fallback. The podman-native name works with `podman build` and breaks `podman compose`.
 
-`up` starts the image it already has and only builds when there is none, so after changing any
-source, pass `--build` or the container will faithfully serve the previous version. `down -v` will
-not help — it deletes your data volume and leaves the stale image untouched.
+</details>
+
+## Sharing
+
+Select a folder, press **Share**, send the link. Whoever opens it gets that one folder and nothing
+above or beside it — no account, no sign-in, read-only. Revoke it and it stops working immediately.
+
+<p align="center">
+  <img src="docs/screenshots/share.png" alt="A shared folder as a stranger sees it: a read-only listing with download links" width="100%">
+</p>
 
 ## Configuration
 
@@ -85,7 +109,9 @@ environment overrides it.
 | `DRIVE_UPLOAD_RETENTION` | `24h` | How long an interrupted upload waits to be resumed |
 | `DRIVE_TRASH_RETENTION` | `720h` (30 days) | How long deleted files stay recoverable. `0` means forever |
 
-## What lives in the data directory
+## Backups
+
+**Back up the whole data directory**, not just `users/`.
 
 ```
 index.db                  file metadata, rebuildable by scanning — and accounts, which are not
@@ -94,23 +120,33 @@ users/<username>/         your files, at their real paths
   .drive/{tmp,trash,thumbs}
 ```
 
-## Backups
+File metadata is rebuildable by scanning, but **accounts, API tokens, and share links live only in
+`index.db`** and are gone with it. That is a deliberate trade: losing the index can never cost you a
+byte of file content, and re-creating an account with its original username reattaches it to its
+files.
 
-**Back up the whole data directory**, not just `users/`. File metadata is rebuildable by scanning,
-but **accounts, API tokens, and share links live only in `index.db`** and are gone with it. That is
-a deliberate trade: losing the index can never cost you a byte of file content, and re-creating an
-account with its original username reattaches it to its files.
+```sh
+scripts/backup.sh backup <data-dir> <backup-dir>
+```
 
-`scripts/backup.sh backup <data-dir> <backup-dir>` does it consistently while the drive is running,
-including the SQLite online backup. The full procedure, and how to restore from files alone, is in
-[docs/backup.md](docs/backup.md).
+That does it consistently while the drive is running, including the SQLite online backup. The full
+procedure, and how to restore from files alone, is in [docs/backup.md](docs/backup.md).
 
 ## Behind a reverse proxy
 
-Uploads are resumable and chunked, which trips the default body-size limit on some proxies —
-nginx refuses at 1 MiB out of the box. Caddy needs nothing. See [docs/proxies.md](docs/proxies.md).
+Uploads are resumable and chunked, which trips the default body-size limit on some proxies — nginx
+refuses at 1 MiB out of the box. Caddy needs nothing. See [docs/proxies.md](docs/proxies.md).
 
-## Developing
+## It follows your system theme
+
+<p align="center">
+  <img src="docs/screenshots/files-dark.png" alt="The same listing in dark mode" width="100%">
+</p>
+
+---
+
+<details>
+<summary><strong>Developing</strong></summary>
 
 Nothing here needs rebuilding an image to see a change, and there is no separate dev compose file
 because there is nothing for it to do. The interface is an ordinary client of the API, in
@@ -137,7 +173,10 @@ Stop it, run it again. A watcher would save you the keystroke and cost a depende
 already faster than a container restart. Run it on `:8080` and the Vite proxy above finds it with no
 configuration. Rebuild the image only to ship one — that is what `--build` is for.
 
-## Building
+</details>
+
+<details>
+<summary><strong>Building from source</strong></summary>
 
 Go lives wherever you put it; there is no cgo and no C toolchain.
 
@@ -150,7 +189,16 @@ go build -ldflags "-X main.Version=v0.1.0" -o drive ./cmd/drive
 whole API and answers `/` with a note saying so. `scripts/release.sh` does both and cross-compiles
 for linux amd64 and arm64.
 
-## Design notes
+The screenshots above are captured from the real binary in a real browser:
+
+```sh
+node web/e2e/shots.mjs docs/screenshots 1440
+```
+
+</details>
+
+<details>
+<summary><strong>Design notes</strong></summary>
 
 - Nothing but permanent delete destroys your bytes. Overwrites and deletes go to trash first.
 - Writes are atomic: temp file, fsync, rename, fsync the parent directory. An interrupted upload
@@ -160,3 +208,5 @@ for linux amd64 and arm64.
   limited to inert raster images — never SVG, never PDF.
 - Accounts are isolated: one storage root each, no shared folders, no groups. See
   [BACKLOG.md](BACKLOG.md) for what was deliberately left out and why.
+
+</details>
