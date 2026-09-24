@@ -21,7 +21,12 @@
 
 ## Get started
 
+Grab the binary for your architecture from the [latest
+release](https://github.com/fosslife/drive/releases/latest) — `drive-linux-amd64` or
+`drive-linux-arm64`, checksums in `SHA256SUMS` — make it executable, and run it:
+
 ```sh
+chmod +x drive-linux-amd64 && mv drive-linux-amd64 drive
 ./drive
 ```
 

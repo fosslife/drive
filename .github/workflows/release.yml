@@ -1,0 +1,38 @@
+# Push a tag, get binaries. The build itself is scripts/release.sh — the same
+# one used locally, so a release is never a second, divergent build recipe.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: go vet ./... && go test ./...
+      - run: npm --prefix web ci
+      - run: npm --prefix web test
+      - run: npm --prefix web run build # embedded by web/embed.go; SKIP_WEB below is why
+
+      - run: VERSION=${GITHUB_REF_NAME} SKIP_WEB=1 scripts/release.sh
+      - run: sha256sum drive-linux-* > SHA256SUMS
+        working-directory: dist
+
+      - run: gh release create "$GITHUB_REF_NAME" --generate-notes dist/*
+        env:
+          GH_TOKEN: ${{ github.token }}
