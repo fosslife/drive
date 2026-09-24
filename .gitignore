@@ -2,6 +2,7 @@
 /data/
 /dist/
 
-# Screenshots the design review captures; the surface brief beside them is kept.
-/.impeccable/review/
-/.impeccable/questions/
+# Agent tooling: local to whoever is driving it, not part of the project.
+/.claude/
+/.impeccable/
+/.serena/
