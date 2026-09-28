@@ -10,7 +10,7 @@ import (
 // emptyEnv simulates starting with no environment at all.
 func emptyEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{EnvDataDir, EnvAddr, EnvMinFree, EnvScanInterval, EnvTrashTTL,
+	for _, k := range []string{EnvDataDir, EnvAddr, EnvMinFree, EnvDefaultQuota, EnvScanInterval, EnvTrashTTL,
 		EnvHostname, EnvACMEEmail, EnvACMEDirectory, "XDG_DATA_HOME", "HOME"} {
 		t.Setenv(k, "")
 	}
@@ -64,6 +64,32 @@ func TestTrashRetentionAcceptsZeroAsNever(t *testing.T) {
 	var invalid *InvalidError
 	if _, err := Load(); !errors.As(err, &invalid) || invalid.Name != EnvTrashTTL {
 		t.Errorf("a negative retention loaded as %v, want an *InvalidError naming %s", err, EnvTrashTTL)
+	}
+}
+
+// 2.1: quotas are off unless someone asks for them, and zero is the way to ask
+// for them to stay off rather than a rejected value.
+func TestDefaultQuotaIsUnlimitedUnlessSet(t *testing.T) {
+	emptyEnv(t)
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.DefaultQuota != 0 {
+		t.Errorf("DefaultQuota = %d with nothing set, want 0 meaning unlimited", c.DefaultQuota)
+	}
+
+	t.Setenv(EnvDefaultQuota, "5368709120")
+	if c, err := Load(); err != nil || c.DefaultQuota != 5<<30 {
+		t.Errorf("DefaultQuota = %d, %v, want 5 GiB", c.DefaultQuota, err)
+	}
+
+	var invalid *InvalidError
+	for _, bad := range []string{"-1", "5GiB", "lots"} {
+		t.Setenv(EnvDefaultQuota, bad)
+		if _, err := Load(); !errors.As(err, &invalid) || invalid.Name != EnvDefaultQuota {
+			t.Errorf("%s=%q loaded as %v, want an *InvalidError naming the variable", EnvDefaultQuota, bad, err)
+		}
 	}
 }
 

@@ -78,6 +78,7 @@ func run() error {
 
 	scanner := scan.NewScanner(db, cfg.DataDir, cfg.ScanInterval)
 	users := auth.NewStore(db, cfg.DataDir, cfg.MinFree)
+	users.DefaultQuota = cfg.DefaultQuota
 
 	// No default credentials, ever. With no account the only way in is the
 	// one-time token printed here, and it stops working once setup completes.

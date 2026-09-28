@@ -52,7 +52,7 @@ func TestDeletingAnAccountLeavesEveryFileWhereItWas(t *testing.T) {
 	put(t, s, ada, "notes.txt", "ada's notes")
 	put(t, s, bob, "budget.csv", "bob's budget")
 
-	if err := s.Delete("ada"); err != nil {
+	if err := s.Delete(0, "ada"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -68,7 +68,7 @@ func TestDeletingAnAccountLeavesEveryFileWhereItWas(t *testing.T) {
 	if _, err := s.Active(ada.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("ada's account after deletion: %v, want ErrNotFound", err)
 	}
-	if err := s.Delete("ada"); !errors.Is(err, ErrNotFound) {
+	if err := s.Delete(0, "ada"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("deleting ada twice: %v, want ErrNotFound", err)
 	}
 }
@@ -115,7 +115,7 @@ func TestRecreatedAccountReattachesToItsStorageRoot(t *testing.T) {
 		t.Fatalf("creating a duplicate username: %v, want ErrUserExists", err)
 	}
 
-	if err := s.Delete("ada"); err != nil {
+	if err := s.Delete(0, "ada"); err != nil {
 		t.Fatal(err)
 	}
 	second, err := s.Create("ada", "a completely different password", false)
@@ -229,7 +229,7 @@ func TestAuthenticateGivesOneAnswerToEveryFailure(t *testing.T) {
 		}
 	}
 
-	if err := s.SetDisabled("ada", true); err != nil {
+	if err := s.SetDisabled(0, "ada", true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Authenticate("ada", "a long enough password"); !errors.Is(err, ErrInvalidCredentials) {
@@ -244,13 +244,13 @@ func TestDisabledAccountStopsResolving(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetDisabled("ada", true); err != nil {
+	if err := s.SetDisabled(0, "ada", true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Active(u.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a disabled account resolved: %v", err)
 	}
-	if err := s.SetDisabled("ada", false); err != nil {
+	if err := s.SetDisabled(0, "ada", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Active(u.ID); err != nil {
@@ -362,7 +362,7 @@ func TestDeletingAnAccountRevokesItsTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Delete("ada"); err != nil {
+	if err := s.Delete(0, "ada"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.AuthenticateToken(secret); !errors.Is(err, ErrInvalidToken) {

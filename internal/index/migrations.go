@@ -3,7 +3,7 @@ package index
 // migrations are applied in order, forward only. Each entry is one schema
 // version: index 0 takes the index to version 1. Never edit a shipped
 // migration, append a new one.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6}
 
 // Identity is an INTEGER PRIMARY KEY AUTOINCREMENT throughout: SQLite recycles
 // plain rowids after the highest row is deleted, AUTOINCREMENT does not.
@@ -131,4 +131,16 @@ CREATE TABLE thumbs (
     state      TEXT    NOT NULL CHECK (state IN ('ready', 'failed')),
     updated_at INTEGER NOT NULL
 );
+`
+
+// An account's byte allowance, and the moment before which its sessions stop
+// authenticating. Both default to zero, and zero is the do-nothing value for
+// both — unlimited, and no session invalidated — so an existing instance comes
+// through this migration behaving exactly as it did.
+//
+// quota_bytes is a limit on new bytes and nothing else: it is read where a
+// write is about to happen, never where a file is read, listed or deleted.
+const schemaV6 = `
+ALTER TABLE users ADD COLUMN quota_bytes         INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN sessions_valid_from INTEGER NOT NULL DEFAULT 0;
 `

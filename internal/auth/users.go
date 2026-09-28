@@ -23,6 +23,16 @@ var (
 	// ErrNotFound is returned by every lookup and every update that matched no
 	// row, for accounts and for tokens alike.
 	ErrNotFound = errors.New("not found")
+	// ErrLastAdmin refuses the three operations that could leave an instance
+	// with nobody able to administer it.
+	ErrLastAdmin = errors.New("the last administrator cannot be deleted, disabled, or demoted")
+	// ErrSelfAction keeps losing the administrative surface someone else's
+	// decision. An administrator locking themselves out is always a mistake.
+	ErrSelfAction = errors.New("an administrator cannot delete, disable, or demote their own account")
+	// ErrInvalidValue is a refusal of what was asked for — an empty password, a
+	// negative quota — as opposed to a failure to carry it out. The two become
+	// different status codes, so they cannot be the same error.
+	ErrInvalidValue = errors.New("invalid value")
 )
 
 // User is an account. There is no password field: the hash never leaves Store.
@@ -31,6 +41,9 @@ type User struct {
 	Username string `json:"username"`
 	IsAdmin  bool   `json:"is_admin"`
 	Disabled bool   `json:"disabled"`
+	// QuotaBytes is the account's allowance for new bytes. Zero is unlimited.
+	QuotaBytes int64 `json:"quota_bytes"`
+	CreatedAt  int64 `json:"created_at"`
 	// StorageRoot is relative to the data directory, e.g. users/ada. The data
 	// directory moves between a host and a container; the roots inside it do not.
 	StorageRoot string `json:"-"`
@@ -57,6 +70,10 @@ type Store struct {
 	db      *index.DB
 	dataDir string
 	minFree int64
+	// DefaultQuota is the allowance a new account is created with, in bytes;
+	// zero is unlimited. Set once at startup from configuration, before the
+	// listener accepts anything.
+	DefaultQuota int64
 }
 
 func NewStore(db *index.DB, dataDir string, minFree int64) *Store {
@@ -77,18 +94,15 @@ func (s *Store) Create(username, password string, admin bool) (*User, error) {
 	if err := ValidUsername(username); err != nil {
 		return nil, err
 	}
-	if password == "" {
-		return nil, errors.New("password must not be empty")
-	}
-	hash, err := HashPassword(password)
+	hash, err := hashNew(password)
 	if err != nil {
 		return nil, err
 	}
 
-	root := "users/" + username
-	res, err := s.db.Exec(`INSERT INTO users (username, password_hash, is_admin, storage_root, created_at)
-	                       VALUES (?, ?, ?, ?, ?)`,
-		username, hash, admin, root, time.Now().Unix())
+	root, createdAt := "users/"+username, time.Now().Unix()
+	res, err := s.db.Exec(`INSERT INTO users (username, password_hash, is_admin, storage_root, created_at, quota_bytes)
+	                       VALUES (?, ?, ?, ?, ?, ?)`,
+		username, hash, admin, root, createdAt, s.DefaultQuota)
 	if err != nil {
 		// modernc.org/sqlite reports constraint failures only in the message;
 		// there is no shared error value to compare against.
@@ -102,7 +116,7 @@ func (s *Store) Create(username, password string, admin bool) (*User, error) {
 		return nil, fmt.Errorf("creating account %q: %w", username, err)
 	}
 
-	u := &User{ID: id, Username: username, IsAdmin: admin, StorageRoot: root}
+	u := &User{ID: id, Username: username, IsAdmin: admin, QuotaBytes: s.DefaultQuota, CreatedAt: createdAt, StorageRoot: root}
 	dir, err := s.Root(u)
 	if err != nil {
 		// No account without a usable root: undo rather than leave one that
@@ -114,14 +128,71 @@ func (s *Store) Create(username, password string, admin bool) (*User, error) {
 	return u, nil
 }
 
-const userColumns = `id, username, is_admin, disabled, storage_root`
+const userColumns = `id, username, is_admin, disabled, quota_bytes, created_at, storage_root`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
-	if err := row.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.Disabled, &u.StorageRoot); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.Disabled, &u.QuotaBytes, &u.CreatedAt, &u.StorageRoot); err != nil {
 		return nil, err
 	}
 	return &u, nil
+}
+
+func hashNew(password string) (string, error) {
+	if password == "" {
+		return "", fmt.Errorf("%w: a password must not be empty", ErrInvalidValue)
+	}
+	return HashPassword(password)
+}
+
+// ChangePassword is a user changing their own password. The current one has to
+// be right: a session left open on a shared machine is not authority to take
+// the account over.
+func (s *Store) ChangePassword(userID int64, current, next string) error {
+	var username, hash string
+	err := s.db.QueryRow(`SELECT username, password_hash FROM users WHERE id = ? AND disabled = 0`, userID).
+		Scan(&username, &hash)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return ErrNotFound
+	case err != nil:
+		return fmt.Errorf("reading account: %w", err)
+	}
+	if !VerifyPassword(hash, current) {
+		return ErrInvalidCredentials
+	}
+	return s.SetPassword(username, next)
+}
+
+// SetPassword replaces a password without knowing the old one, which is what an
+// administrator resetting one does.
+//
+// It moves the account's session epoch forward, so every session that
+// authenticated before this moment stops authenticating. API tokens are
+// deliberately untouched: a token is revoked by revoking it, and a password
+// change that silently killed an account's automation would surprise the wrong
+// person at the wrong time.
+func (s *Store) SetPassword(username, password string) error {
+	hash, err := hashNew(password)
+	if err != nil {
+		return err
+	}
+	// Unix nanoseconds, matching what a session records at login; see the note
+	// on sessionLoginKey for why this is not seconds.
+	return s.affectOne(`UPDATE users SET password_hash = ?, sessions_valid_from = ? WHERE username = ?`,
+		hash, time.Now().UnixNano(), username)
+}
+
+// ActiveSession is Active for a browser session: the account must be usable and
+// the session must not predate the account's last credential change. loginAt is
+// when the session authenticated.
+func (s *Store) ActiveSession(id, loginAt int64) (*User, error) {
+	u, err := scanUser(s.db.QueryRow(`SELECT `+userColumns+` FROM users
+	                                  WHERE id = ? AND disabled = 0 AND sessions_valid_from <= ?`, id, loginAt))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return u, err
 }
 
 // Active returns the user only while the account can be used. Every
@@ -162,7 +233,7 @@ func (s *Store) Authenticate(username, password string) (*User, error) {
 		hash string
 	)
 	err := s.db.QueryRow(`SELECT `+userColumns+`, password_hash FROM users WHERE username = ?`, username).
-		Scan(&u.ID, &u.Username, &u.IsAdmin, &u.Disabled, &u.StorageRoot, &hash)
+		Scan(&u.ID, &u.Username, &u.IsAdmin, &u.Disabled, &u.QuotaBytes, &u.CreatedAt, &u.StorageRoot, &hash)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		equaliseTiming(password)
@@ -177,8 +248,24 @@ func (s *Store) Authenticate(username, password string) (*User, error) {
 }
 
 // SetDisabled turns an account off without touching its files or its root.
-func (s *Store) SetDisabled(username string, disabled bool) error {
-	return s.affectOne(`UPDATE users SET disabled = ? WHERE username = ?`, disabled, username)
+//
+// actorID is the administrator asking, or 0 for no-one in particular — a test
+// or a future command line. See guarded for what the actor is checked against.
+func (s *Store) SetDisabled(actorID int64, username string, disabled bool) error {
+	if !disabled {
+		// Enabling an account can lock nobody out of anything.
+		return s.affectOne(`UPDATE users SET disabled = 0 WHERE username = ?`, username)
+	}
+	return s.guarded(actorID, username, `UPDATE users SET disabled = 1 WHERE username = ?`)
+}
+
+// SetAdmin grants or revokes administrator status. Granting is unguarded:
+// another administrator can only make the instance harder to lock out of.
+func (s *Store) SetAdmin(actorID int64, username string, admin bool) error {
+	if admin {
+		return s.affectOne(`UPDATE users SET is_admin = 1 WHERE username = ?`, username)
+	}
+	return s.guarded(actorID, username, `UPDATE users SET is_admin = 0 WHERE username = ?`)
 }
 
 // Delete removes the account, its file rows, its tokens, and its shares.
@@ -186,8 +273,105 @@ func (s *Store) SetDisabled(username string, disabled bool) error {
 // It deliberately does not touch the storage root: nothing but a permanent
 // delete destroys user bytes, and the directory left behind is what makes
 // re-creating the account a recovery rather than a fresh start.
-func (s *Store) Delete(username string) error {
-	return s.affectOne(`DELETE FROM users WHERE username = ?`, username)
+func (s *Store) Delete(actorID int64, username string) error {
+	return s.guarded(actorID, username, `DELETE FROM users WHERE username = ?`)
+}
+
+// guarded runs one of the three operations that can leave an instance with
+// nobody able to administer it — delete, disable, demote — under the two rules
+// that stop it: the target is not the actor, and the target is not the last
+// enabled administrator.
+//
+// The last-administrator half is a condition on the statement itself rather
+// than a read followed by a write, so two administrators demoting each other at
+// the same moment cannot both find another administrator and both succeed.
+func (s *Store) guarded(actorID int64, username, stmt string) error {
+	if actorID != 0 {
+		actor, err := s.Active(actorID)
+		if err != nil {
+			return err
+		}
+		if actor.Username == username {
+			return ErrSelfAction
+		}
+	}
+
+	const notTheLastAdmin = ` AND (is_admin = 0 OR disabled = 1 OR EXISTS (
+	          SELECT 1 FROM users other
+	           WHERE other.is_admin = 1 AND other.disabled = 0 AND other.username <> ?))`
+
+	res, err := s.db.Exec(stmt+notTheLastAdmin, username, username)
+	if err != nil {
+		return fmt.Errorf("updating account: %w", err)
+	}
+	switch n, err := res.RowsAffected(); {
+	case err != nil:
+		return err
+	case n > 0:
+		return nil
+	}
+	// Nothing changed: either there is no such account, or the guard refused.
+	if _, err := s.ByUsername(username); err != nil {
+		return err
+	}
+	return ErrLastAdmin
+}
+
+// ByUsername looks an account up by name.
+func (s *Store) ByUsername(username string) (*User, error) {
+	u, err := scanUser(s.db.QueryRow(`SELECT `+userColumns+` FROM users WHERE username = ?`, username))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return u, err
+}
+
+// SetQuota sets an account's allowance for new bytes; 0 is unlimited.
+//
+// A quota below what the account already holds is allowed and deliberately
+// changes nothing about the files that are there: it is a limit on the next
+// write, never a reason to delete or hide anything.
+func (s *Store) SetQuota(username string, bytes int64) error {
+	if bytes < 0 {
+		return fmt.Errorf("%w: a quota must not be negative", ErrInvalidValue)
+	}
+	return s.affectOne(`UPDATE users SET quota_bytes = ? WHERE username = ?`, bytes, username)
+}
+
+// Usage is what an account occupies and what it has spoken for.
+type Usage struct {
+	// Bytes is stored files plus trashed files: trash has not been freed.
+	Bytes int64 `json:"usage_bytes"`
+	Files int64 `json:"file_count"`
+	// Pending is the declared size of uploads that have not finished. They
+	// count against a quota — without them ten concurrent uploads each pass a
+	// check the ten of them together blow past — and the upload retention
+	// sweep is what releases an abandoned one.
+	Pending int64 `json:"pending_bytes"`
+}
+
+// Usage counts from the index rather than keeping a running total. The index is
+// the disposable half of this system: a stored counter would be authoritative
+// state for user-visible behaviour living in the half that gets thrown away and
+// rebuilt, with a drift bug waiting at every path that frees or consumes bytes.
+//
+// ponytail: one aggregate over a user's rows, at upload creation and when an
+// administrator opens a screen. A maintained counter only if a folder of
+// 100,000 files makes it show up in upload latency.
+func (s *Store) Usage(userID int64) (Usage, error) {
+	var u Usage
+	err := s.db.QueryRow(`SELECT COALESCE(SUM(size), 0), COUNT(*) FROM files
+	                       WHERE user_id = ? AND kind = 'file' AND state IN ('present', 'trashed')`,
+		userID).Scan(&u.Bytes, &u.Files)
+	if err != nil {
+		return Usage{}, fmt.Errorf("measuring account usage: %w", err)
+	}
+	err = s.db.QueryRow(`SELECT COALESCE(SUM(size), 0) FROM uploads WHERE user_id = ?`,
+		userID).Scan(&u.Pending)
+	if err != nil {
+		return Usage{}, fmt.Errorf("measuring account usage: %w", err)
+	}
+	return u, nil
 }
 
 func (s *Store) affectOne(query string, args ...any) error {

@@ -55,11 +55,11 @@ func (s *Server) authenticate(r *http.Request) (*auth.User, error) {
 	if secret, ok := bearerToken(r); ok {
 		return s.users.AuthenticateToken(secret)
 	}
-	id := auth.SessionUser(r.Context(), s.sessions)
+	id, loginAt := auth.SessionLogin(r.Context(), s.sessions)
 	if id == 0 {
 		return nil, auth.ErrInvalidCredentials
 	}
-	return s.users.Active(id)
+	return s.users.ActiveSession(id, loginAt)
 }
 
 func bearerToken(r *http.Request) (string, bool) {
@@ -207,8 +207,59 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// accountInfo is an account with what it occupies. The two are embedded rather
+// than nested so a client reads one flat object, and Usage is measured per
+// request because it is counted from the index, never stored.
+type accountInfo struct {
+	*auth.User
+	auth.Usage
+}
+
+func (s *Server) accountInfo(u *auth.User) (accountInfo, error) {
+	usage, err := s.users.Usage(u.ID)
+	return accountInfo{User: u, Usage: usage}, err
+}
+
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, userFrom(r.Context()))
+	// Only ever the caller's own figures: there is no username parameter here
+	// to point at somebody else's account.
+	me, err := s.accountInfo(userFrom(r.Context()))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not read the account")
+		return
+	}
+	writeJSON(w, http.StatusOK, me)
+}
+
+// changeOwnPassword is any user changing their own password. The current one is
+// required: a session left open on a shared machine is not authority to take
+// the account over, and a wrong answer costs an attempt against the same
+// limiter a failed login does.
+func (s *Server) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Current string `json:"current_password"`
+		New     string `json:"new_password"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	u := userFrom(r.Context())
+	who, source := "user:"+u.Username, "ip:"+clientIP(r)
+	if !s.limiter.Allow(who, source) {
+		writeError(w, http.StatusTooManyRequests, "too many failed attempts, try again later")
+		return
+	}
+
+	switch err := s.users.ChangePassword(u.ID, in.Current, in.New); {
+	case errors.Is(err, auth.ErrInvalidCredentials):
+		s.limiter.Fail(who, source)
+		writeError(w, http.StatusForbidden, "that is not your current password")
+	case err != nil:
+		writeError(w, http.StatusBadRequest, err.Error())
+	default:
+		s.limiter.Succeed(who, source)
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) {
@@ -255,13 +306,27 @@ func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// listUsers is the operator's inventory: every account with what it holds.
+//
+// ponytail: one usage query per account, which is a household's worth of
+// queries on a screen an administrator opens by hand. One grouped query if an
+// instance ever has enough accounts for this to show.
 func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := s.users.List()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not list accounts")
 		return
 	}
-	writeJSON(w, http.StatusOK, users)
+	inventory := make([]accountInfo, 0, len(users))
+	for _, u := range users {
+		info, err := s.accountInfo(u)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not measure an account")
+			return
+		}
+		inventory = append(inventory, info)
+	}
+	writeJSON(w, http.StatusOK, inventory)
 }
 
 func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
@@ -283,24 +348,81 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) setUserDisabled(w http.ResponseWriter, r *http.Request) {
+// patchUser applies whichever of an account's administrable fields the body
+// names. Each is optional: a pointer distinguishes "set it to false" from "not
+// mentioned", which a plain bool cannot.
+func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Disabled bool `json:"disabled"`
+		Disabled   *bool  `json:"disabled"`
+		IsAdmin    *bool  `json:"is_admin"`
+		QuotaBytes *int64 `json:"quota_bytes"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	s.userChange(w, s.users.SetDisabled(r.PathValue("username"), in.Disabled))
+	actor, username := userFrom(r.Context()).ID, r.PathValue("username")
+
+	// One field at a time, each through the store's own guard. An error stops
+	// the rest: an administrator who asked for two changes and got one should
+	// see which one refused rather than a half-applied patch reported as a
+	// success.
+	if in.QuotaBytes != nil {
+		if err := s.users.SetQuota(username, *in.QuotaBytes); err != nil {
+			s.userChange(w, err)
+			return
+		}
+	}
+	if in.IsAdmin != nil {
+		if err := s.users.SetAdmin(actor, username, *in.IsAdmin); err != nil {
+			s.userChange(w, err)
+			return
+		}
+	}
+	if in.Disabled != nil {
+		if err := s.users.SetDisabled(actor, username, *in.Disabled); err != nil {
+			s.userChange(w, err)
+			return
+		}
+	}
+	// A body that named nothing changed nothing, which is not an error: the
+	// account has to exist, though, or this reported success about nobody.
+	if in.QuotaBytes == nil && in.IsAdmin == nil && in.Disabled == nil {
+		if _, err := s.users.ByUsername(username); err != nil {
+			s.userChange(w, err)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// resetUserPassword is an administrator setting a password without knowing the
+// old one. It is its own endpoint rather than a field on the patch above,
+// because a secret in a general-purpose body is a secret that ends up in
+// whatever log line somebody adds while debugging the other fields.
+func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Password string `json:"password"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	s.userChange(w, s.users.SetPassword(r.PathValue("username"), in.Password))
 }
 
 func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
-	s.userChange(w, s.users.Delete(r.PathValue("username")))
+	s.userChange(w, s.users.Delete(userFrom(r.Context()).ID, r.PathValue("username")))
 }
 
 func (s *Server) userChange(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, auth.ErrNotFound):
 		writeError(w, http.StatusNotFound, "no such account")
+	case errors.Is(err, auth.ErrLastAdmin), errors.Is(err, auth.ErrSelfAction):
+		// A conflict rather than a refusal of authority: the caller is allowed
+		// to do this, to somebody else, once somebody else is an administrator.
+		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, auth.ErrInvalidValue), errors.Is(err, auth.ErrInvalidUsername):
+		writeError(w, http.StatusBadRequest, err.Error())
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "could not update the account")
 	default:

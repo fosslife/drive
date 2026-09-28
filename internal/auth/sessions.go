@@ -16,6 +16,12 @@ import (
 // index on every request, so editing the cookie can only invalidate it.
 const sessionUserKey = "user_id"
 
+// sessionLoginKey is when the session authenticated. It is compared against the
+// account's sessions_valid_from, which is how a password change ends sessions
+// that were open elsewhere. It is not authority either: a forged value can only
+// move a session's own expiry around, and identity still comes from the index.
+const sessionLoginKey = "login_at"
+
 // SessionLifetime is deliberately long. This is a drive people leave open, and
 // logout, disable, and delete all revoke server-side immediately regardless.
 const SessionLifetime = 30 * 24 * time.Hour
@@ -47,6 +53,11 @@ func Login(ctx context.Context, m *scs.SessionManager, u *User) error {
 		return err
 	}
 	m.Put(ctx, sessionUserKey, u.ID)
+	// Nanoseconds, not seconds: a reset and a fresh login land in the same
+	// second all the time, and at that resolution the comparison cannot say
+	// which came first — so either the reset misses the session it is meant to
+	// end, or the new login is refused by its own account's epoch.
+	m.Put(ctx, sessionLoginKey, time.Now().UnixNano())
 	return nil
 }
 
@@ -56,8 +67,8 @@ func Logout(ctx context.Context, m *scs.SessionManager) error {
 	return m.Destroy(ctx)
 }
 
-// SessionUser returns the id the session is bound to, or 0 for a session that
-// has not authenticated.
-func SessionUser(ctx context.Context, m *scs.SessionManager) int64 {
-	return m.GetInt64(ctx, sessionUserKey)
+// SessionLogin returns the id the session is bound to and the unix time it
+// authenticated. The id is 0 for a session that has not authenticated.
+func SessionLogin(ctx context.Context, m *scs.SessionManager) (id, loginAt int64) {
+	return m.GetInt64(ctx, sessionUserKey), m.GetInt64(ctx, sessionLoginKey)
 }

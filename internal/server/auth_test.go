@@ -393,7 +393,7 @@ func TestAdministratorManagesAccounts(t *testing.T) {
 		t.Errorf("ada listing accounts: %d %s, want 403", w.Code, w.Body.String())
 	}
 
-	if w := as(admin, "POST", "/api/admin/users/ada/disabled", map[string]bool{"disabled": true}); w.Code != http.StatusNoContent {
+	if w := as(admin, "PATCH", "/api/admin/users/ada", map[string]bool{"disabled": true}); w.Code != http.StatusNoContent {
 		t.Fatalf("disabling: %d %s", w.Code, w.Body.String())
 	}
 	if w := as(ada, "GET", "/api/me", nil); w.Code != http.StatusUnauthorized {
@@ -411,5 +411,45 @@ func TestAdministratorManagesAccounts(t *testing.T) {
 	}
 	if w := as(admin, "GET", "/api/admin/users", nil); !strings.Contains(w.Body.String(), "root") || strings.Contains(w.Body.String(), "ada") {
 		t.Errorf("account list after the delete: %s", w.Body.String())
+	}
+}
+
+// 1.3: a password reset ends the sessions that were open elsewhere. API tokens
+// are deliberately untouched — a token is revoked by revoking it, and a reset
+// that silently killed an account's automation would surprise the wrong person.
+func TestResettingAPasswordEndsExistingSessionsButNotTokens(t *testing.T) {
+	h := newHarness(t)
+	ada := h.account("ada", false)
+	cookie := sessionCookie(t, login(t, h, "ada", testPassword))
+	secret := h.token(ada)
+
+	withCookie := func() *httptest.ResponseRecorder {
+		t.Helper()
+		req := request("GET", "/api/me", nil)
+		req.AddCookie(cookie)
+		return h.do(req)
+	}
+	if w := withCookie(); w.Code != http.StatusOK {
+		t.Fatalf("the session before the reset: %d %s", w.Code, w.Body.String())
+	}
+
+	if err := h.users.SetPassword("ada", "reset by the operator"); err != nil {
+		t.Fatal(err)
+	}
+
+	if w := withCookie(); w.Code != http.StatusUnauthorized {
+		t.Errorf("the session after the reset: %d %s, want 401", w.Code, w.Body.String())
+	}
+	if w := h.as(secret, "GET", "/api/me", nil); w.Code != http.StatusOK {
+		t.Errorf("an API token after the account's password was reset: %d %s, want 200", w.Code, w.Body.String())
+	}
+	if w := login(t, h, "ada", "reset by the operator"); w.Code != http.StatusOK {
+		t.Errorf("signing in with the new password: %d %s", w.Code, w.Body.String())
+	}
+	fresh := sessionCookie(t, login(t, h, "ada", "reset by the operator"))
+	req := request("GET", "/api/me", nil)
+	req.AddCookie(fresh)
+	if w := h.do(req); w.Code != http.StatusOK {
+		t.Errorf("a session opened after the reset: %d %s", w.Code, w.Body.String())
 	}
 }

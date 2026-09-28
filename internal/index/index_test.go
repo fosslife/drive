@@ -68,6 +68,55 @@ func TestMigrateFromEmptyDirectory(t *testing.T) {
 	}
 }
 
+// 1.1: the quota columns arrive on an index that already holds accounts. Their
+// defaults are the do-nothing values, so an instance that upgrades into this
+// migration keeps every account exactly as it was: unlimited, still signed in.
+func TestMigratingAnExistingIndexLeavesAccountsUnlimited(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "index.db")
+	before, err := open(path, migrations[:5])
+	if err != nil {
+		t.Fatalf("opening at schema 5: %v", err)
+	}
+	_, err = before.Exec(`INSERT INTO users (username, password_hash, is_admin, storage_root, created_at)
+	                      VALUES ('ada', 'hash', 1, 'users/ada', 0)`)
+	if err != nil {
+		t.Fatalf("seeding an account: %v", err)
+	}
+	before.Close()
+
+	db, err := Open(path)
+	if err != nil {
+		t.Fatalf("migrating a v5 index: %v", err)
+	}
+	defer db.Close()
+
+	var version int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		t.Fatalf("reading schema version: %v", err)
+	}
+	if version != 6 {
+		t.Errorf("schema version = %d, want 6", version)
+	}
+
+	var (
+		admin      bool
+		quota      int64
+		validFrom  int64
+		storageDir string
+	)
+	err = db.QueryRow(`SELECT is_admin, quota_bytes, sessions_valid_from, storage_root
+	                   FROM users WHERE username = 'ada'`).Scan(&admin, &quota, &validFrom, &storageDir)
+	if err != nil {
+		t.Fatalf("reading the migrated account: %v", err)
+	}
+	if !admin || storageDir != "users/ada" {
+		t.Errorf("account changed by the migration: admin %v, root %q", admin, storageDir)
+	}
+	if quota != 0 || validFrom != 0 {
+		t.Errorf("quota_bytes = %d, sessions_valid_from = %d; both must default to 0", quota, validFrom)
+	}
+}
+
 func TestRefusesNewerSchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "index.db")
 	db, err := Open(path)

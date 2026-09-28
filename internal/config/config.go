@@ -18,6 +18,7 @@ const (
 	EnvDataDir       = "DRIVE_DATA_DIR"
 	EnvAddr          = "DRIVE_ADDR"
 	EnvMinFree       = "DRIVE_MIN_FREE_BYTES"
+	EnvDefaultQuota  = "DRIVE_DEFAULT_QUOTA_BYTES"
 	EnvScanInterval  = "DRIVE_SCAN_INTERVAL"
 	EnvUploadTTL     = "DRIVE_UPLOAD_RETENTION"
 	EnvTrashTTL      = "DRIVE_TRASH_RETENTION"
@@ -57,6 +58,13 @@ type Config struct {
 	ScanInterval time.Duration
 	UploadTTL    time.Duration
 	TrashTTL     time.Duration
+
+	// DefaultQuota is the allowance a newly created account gets, in bytes.
+	// Zero, the default, is unlimited: an instance for one household wants no
+	// quotas at all, and the free-space reserve is what protects the volume.
+	// It applies at creation only — changing it never moves an existing
+	// account's quota, which is an administrator's decision per account.
+	DefaultQuota int64
 
 	// Hostname is the public name a certificate is obtained for, and the only
 	// switch for HTTPS there is. Empty means plaintext: no name means no CA
@@ -127,6 +135,15 @@ func Load() (Config, error) {
 			return Config{}, &InvalidError{EnvMinFree, v, "a non-negative whole number of bytes"}
 		}
 		c.MinFree = n
+	}
+	if v := os.Getenv(EnvDefaultQuota); v != "" {
+		// Zero is meaningful: it is the unlimited setting, so the bound is
+		// non-negative rather than positive.
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			return Config{}, &InvalidError{EnvDefaultQuota, v, "a whole number of bytes, or 0 for no quota"}
+		}
+		c.DefaultQuota = n
 	}
 	if v := os.Getenv(EnvScanInterval); v != "" {
 		d, err := time.ParseDuration(v)

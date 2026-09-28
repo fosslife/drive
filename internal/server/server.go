@@ -71,6 +71,7 @@ func (s *Server) routes() []route {
 
 		{"POST /api/logout", false, s.logout},
 		{"GET /api/me", false, s.me},
+		{"POST /api/me/password", false, s.changeOwnPassword},
 		{"GET /api/scan", false, s.scan},
 
 		{"GET /api/list", false, s.list},
@@ -103,7 +104,8 @@ func (s *Server) routes() []route {
 
 		{"GET /api/admin/users", false, s.requireAdmin(s.listUsers)},
 		{"POST /api/admin/users", false, s.requireAdmin(s.createUser)},
-		{"POST /api/admin/users/{username}/disabled", false, s.requireAdmin(s.setUserDisabled)},
+		{"PATCH /api/admin/users/{username}", false, s.requireAdmin(s.patchUser)},
+		{"POST /api/admin/users/{username}/password", false, s.requireAdmin(s.resetUserPassword)},
 		{"DELETE /api/admin/users/{username}", false, s.requireAdmin(s.deleteUser)},
 
 		// An unmatched /api/ path is a client mistake, and answering it with the
