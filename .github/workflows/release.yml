@@ -9,6 +9,8 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write    # to sign the provenance attestations
+  attestations: write
 
 jobs:
   release:
@@ -34,6 +36,14 @@ jobs:
       - run: sha256sum drive-linux-* > SHA256SUMS
         working-directory: dist
 
+      # Provenance: a signed record that this exact file came out of this exact
+      # workflow, which is what lets somebody who did not build it run
+      # `gh attest verify` instead of trusting the download. Binaries here, the
+      # image below; both are checked the same way. See docs/verify.md.
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/drive-linux-*
+
       - run: gh release create "$GITHUB_REF_NAME" --generate-notes dist/*
         env:
           GH_TOKEN: ${{ github.token }}
@@ -49,9 +59,25 @@ jobs:
       - run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
         env:
           GH_TOKEN: ${{ github.token }}
-      - run: |
+      # --provenance/--sbom put the build's own record and its bill of materials
+      # in the registry beside the image; the attestation step after this signs
+      # the digest with GitHub's identity, which is the part `gh attest verify`
+      # checks. The source label is what links the package to this repository,
+      # so the package page shows the README instead of nothing.
+      - id: push
+        run: |
           docker buildx build --push \
             --platform linux/amd64,linux/arm64 \
+            --provenance=mode=max --sbom=true \
             --build-arg VERSION="$GITHUB_REF_NAME" \
+            --label org.opencontainers.image.source="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --metadata-file /tmp/build.json \
             -t "ghcr.io/$GITHUB_REPOSITORY:$GITHUB_REF_NAME" \
             -t "ghcr.io/$GITHUB_REPOSITORY:latest" .
+          jq -r '"digest=" + ."containerimage.digest"' /tmp/build.json >> "$GITHUB_OUTPUT"
+
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
