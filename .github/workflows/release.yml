@@ -38,7 +38,7 @@ jobs:
 
       # Provenance: a signed record that this exact file came out of this exact
       # workflow, which is what lets somebody who did not build it run
-      # `gh attest verify` instead of trusting the download. Binaries here, the
+      # `gh attestation verify` instead of trusting the download. Binaries here, the
       # image below; both are checked the same way. See docs/verify.md.
       - uses: actions/attest-build-provenance@v4
         with:
@@ -61,7 +61,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       # --provenance/--sbom put the build's own record and its bill of materials
       # in the registry beside the image; the attestation step after this signs
-      # the digest with GitHub's identity, which is the part `gh attest verify`
+      # the digest with GitHub's identity, which is the part `gh attestation verify`
       # checks. The source label is what links the package to this repository,
       # so the package page shows the README instead of nothing.
       - id: push

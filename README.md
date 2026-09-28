@@ -83,7 +83,7 @@ The setup URL in the log says `localhost`, because a container cannot know the n
 Keep the token, swap the host.
 
 Images and binaries are signed as they are built, so you can check that what you pulled came out of
-this repository before you run it: `gh attest verify oci://ghcr.io/fosslife/drive:latest --repo
+this repository before you run it: `gh attestation verify oci://ghcr.io/fosslife/drive:latest --repo
 fosslife/drive`. See [docs/verify.md](docs/verify.md).
 
 <details>
