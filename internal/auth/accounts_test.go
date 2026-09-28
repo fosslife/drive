@@ -283,3 +283,33 @@ func TestNewAccountTakesTheConfiguredQuota(t *testing.T) {
 		t.Errorf("the stored quota: %+v, %v", stored, err)
 	}
 }
+
+// A token authenticates as its owner, so it must resolve to the same account a
+// session does — every field of it. A separate column list here once missed
+// quota_bytes, which let a token upload past a quota a browser was held to.
+func TestATokenResolvesToTheSameAccountASessionDoes(t *testing.T) {
+	s, _ := testStore(t)
+	ada, err := s.Create("ada", "a long enough password", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetQuota("ada", 4096); err != nil {
+		t.Fatal(err)
+	}
+	secret, _, err := s.CreateToken(ada.ID, "laptop")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bySession, err := s.Active(ada.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byToken, err := s.AuthenticateToken(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *byToken != *bySession {
+		t.Errorf("a token resolves to %+v but a session to %+v; every field has to match", byToken, bySession)
+	}
+}

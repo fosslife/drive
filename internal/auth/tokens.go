@@ -88,24 +88,32 @@ func (s *Store) RevokeToken(userID, id int64) error {
 // its own: it authenticates as the user and gets exactly that user's access,
 // which is why it can never reach outside their storage root.
 func (s *Store) AuthenticateToken(secret string) (*User, error) {
-	var (
-		u  User
-		id int64
-	)
-	err := s.db.QueryRow(`SELECT t.id, u.id, u.username, u.is_admin, u.disabled, u.storage_root
-	                      FROM api_tokens t JOIN users u ON u.id = t.user_id
-	                      WHERE t.token_hash = ? AND u.disabled = 0`, HashSecret(secret)).
-		Scan(&id, &u.ID, &u.Username, &u.IsAdmin, &u.Disabled, &u.StorageRoot)
+	// The token row first, then the account through the same lookup a session
+	// uses. Joining and scanning the user here instead was one hand-written
+	// column list too many: it silently missed quota_bytes when that column was
+	// added, which let a token upload past a quota a browser was held to.
+	var id, userID int64
+	err := s.db.QueryRow(`SELECT id, user_id FROM api_tokens WHERE token_hash = ?`, HashSecret(secret)).
+		Scan(&id, &userID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return nil, ErrInvalidToken
 	case err != nil:
 		return nil, fmt.Errorf("looking up token: %w", err)
 	}
+	u, err := s.Active(userID)
+	if errors.Is(err, ErrNotFound) {
+		// A disabled or deleted account takes its tokens with it, and says no
+		// more than an unknown token would.
+		return nil, ErrInvalidToken
+	}
+	if err != nil {
+		return nil, err
+	}
 	// Best effort: a token that works must not stop working because the audit
 	// column could not be written.
 	s.db.Exec(`UPDATE api_tokens SET last_used_at = ? WHERE id = ?`, time.Now().Unix(), id)
-	return &u, nil
+	return u, nil
 }
 
 // NewSecret is the shape every opaque secret here takes — API token, setup

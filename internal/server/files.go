@@ -43,7 +43,9 @@ func fileError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, files.ErrInvalid), errors.Is(err, storage.ErrInvalidPath):
 		writeError(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, storage.ErrNoSpace):
+	case errors.Is(err, storage.ErrNoSpace), errors.Is(err, files.ErrOverQuota):
+		// Both mean "there is no room", and which room is missing is in the
+		// message: the volume's reserve, or this account's quota.
 		writeError(w, http.StatusInsufficientStorage, err.Error())
 	default:
 		slog.Error("file operation failed", "error", err)

@@ -312,40 +312,10 @@ func (s *Store) SetQuota(username string, bytes int64) error {
 	return s.affectOne(`UPDATE users SET quota_bytes = ? WHERE username = ?`, bytes, username)
 }
 
-// Usage is what an account occupies and what it has spoken for.
-type Usage struct {
-	// Bytes is stored files plus trashed files: trash has not been freed.
-	Bytes int64 `json:"usage_bytes"`
-	Files int64 `json:"file_count"`
-	// Pending is the declared size of uploads that have not finished. They
-	// count against a quota — without them ten concurrent uploads each pass a
-	// check the ten of them together blow past — and the upload retention
-	// sweep is what releases an abandoned one.
-	Pending int64 `json:"pending_bytes"`
-}
-
-// Usage counts from the index rather than keeping a running total. The index is
-// the disposable half of this system: a stored counter would be authoritative
-// state for user-visible behaviour living in the half that gets thrown away and
-// rebuilt, with a drift bug waiting at every path that frees or consumes bytes.
-//
-// ponytail: one aggregate over a user's rows, at upload creation and when an
-// administrator opens a screen. A maintained counter only if a folder of
-// 100,000 files makes it show up in upload latency.
-func (s *Store) Usage(userID int64) (Usage, error) {
-	var u Usage
-	err := s.db.QueryRow(`SELECT COALESCE(SUM(size), 0), COUNT(*) FROM files
-	                       WHERE user_id = ? AND kind = 'file' AND state IN ('present', 'trashed')`,
-		userID).Scan(&u.Bytes, &u.Files)
-	if err != nil {
-		return Usage{}, fmt.Errorf("measuring account usage: %w", err)
-	}
-	err = s.db.QueryRow(`SELECT COALESCE(SUM(size), 0) FROM uploads WHERE user_id = ?`,
-		userID).Scan(&u.Pending)
-	if err != nil {
-		return Usage{}, fmt.Errorf("measuring account usage: %w", err)
-	}
-	return u, nil
+// Usage is what the account occupies, measured rather than remembered. See
+// index.MeasureUsage for why it is counted every time.
+func (s *Store) Usage(userID int64) (index.Usage, error) {
+	return index.MeasureUsage(s.db, userID)
 }
 
 func (s *Store) affectOne(query string, args ...any) error {

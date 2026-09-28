@@ -21,6 +21,12 @@ import (
 // an upload has arrived. The server's answer is the file on disk.
 var ErrOffsetConflict = errors.New("upload offset does not match")
 
+// ErrOverQuota means the account, not the volume, has no room. It is a
+// different error from storage.ErrNoSpace on purpose: one is answered by
+// deleting your own files, the other by the operator buying a disk, and a
+// message that confused them would send people to the wrong place.
+var ErrOverQuota = errors.New("account quota exceeded")
+
 // Upload is an in-flight transfer. Its bytes live in a temp file under
 // .drive/tmp and appear at Dir/Name only once the last one has arrived, so an
 // abandoned upload leaves the destination exactly as it was.
@@ -46,7 +52,7 @@ func scanUpload(row interface{ Scan(...any) error }) (Upload, error) {
 // NewUpload reserves an upload. The space guard runs here rather than at the
 // last chunk: refusing 4 GB up front is an error message, refusing it at the
 // end is a wasted evening.
-func NewUpload(db *index.DB, userID int64, root *storage.Root, dir, name string, size int64, replace bool) (Upload, error) {
+func NewUpload(db *index.DB, userID int64, root *storage.Root, dir, name string, size int64, replace bool, quota int64) (Upload, error) {
 	if name == "" || strings.Contains(name, "/") {
 		return Upload{}, fmt.Errorf("%w: %q is not a file name", ErrInvalid, name)
 	}
@@ -63,6 +69,28 @@ func NewUpload(db *index.DB, userID int64, root *storage.Root, dir, name string,
 		return Upload{}, err
 	}
 
+	// The quota is checked and the reservation is written in one transaction,
+	// so uploads started at the same moment cannot each find room that only one
+	// of them can have. The index runs on a single connection, so this is short
+	// by obligation as well as by taste.
+	tx, err := db.Begin()
+	if err != nil {
+		return Upload{}, fmt.Errorf("creating upload: %w", err)
+	}
+	defer tx.Rollback()
+
+	if quota > 0 {
+		used, err := index.MeasureUsage(tx, userID)
+		if err != nil {
+			return Upload{}, err
+		}
+		if used.Bytes+used.Pending+size > quota {
+			return Upload{}, fmt.Errorf(
+				"%w: this upload of %d bytes does not fit in a quota of %d, with %d stored and %d reserved by uploads in flight",
+				ErrOverQuota, size, quota, used.Bytes, used.Pending)
+		}
+	}
+
 	temp, err := root.CreateUpload()
 	if err != nil {
 		return Upload{}, err
@@ -74,9 +102,13 @@ func NewUpload(db *index.DB, userID int64, root *storage.Root, dir, name string,
 	}
 
 	now := time.Now().Unix()
-	if _, err := db.Exec(`INSERT INTO uploads (id, user_id, dir, name, size, temp_name, replace, created_at, updated_at)
+	if _, err := tx.Exec(`INSERT INTO uploads (id, user_id, dir, name, size, temp_name, replace, created_at, updated_at)
 	                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, userID, dir, name, size, temp, replace, now, now); err != nil {
+		root.DiscardUpload(temp)
+		return Upload{}, fmt.Errorf("creating upload: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
 		root.DiscardUpload(temp)
 		return Upload{}, fmt.Errorf("creating upload: %w", err)
 	}

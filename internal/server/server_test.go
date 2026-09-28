@@ -33,7 +33,11 @@ type harness struct {
 	status  scan.Status // what the scanner reports; assign to change it
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t *testing.T) *harness { return newHarnessReserving(t, 0) }
+
+// newHarnessReserving is newHarness with a free-space reserve, which is how a
+// test reaches the refusal that comes from the volume rather than the account.
+func newHarnessReserving(t *testing.T, minFree int64) *harness {
 	t.Helper()
 	dir := t.TempDir()
 	db, err := index.Open(filepath.Join(dir, "index.db"))
@@ -42,7 +46,7 @@ func newHarness(t *testing.T) *harness {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	h := &harness{t: t, db: db, dataDir: dir, users: auth.NewStore(db, dir, 0)}
+	h := &harness{t: t, db: db, dataDir: dir, users: auth.NewStore(db, dir, minFree)}
 	// secure=true is the HTTPS case the spec describes; main follows the listener.
 	h.Server = New(db, h.users, auth.NewSessions(db, true), func() scan.Status { return h.status })
 	h.SetReady(true)

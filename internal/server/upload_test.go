@@ -37,9 +37,9 @@ func (c *uploader) req(method, path string, body io.Reader) *http.Request {
 	return req
 }
 
-// create reserves an upload and returns its id.
-func (c *uploader) create(dir, name string, size int, replace bool) string {
-	c.t.Helper()
+// tryCreate asks for an upload and hands back whatever the server said, for
+// the tests that are about the refusal rather than the transfer.
+func (c *uploader) tryCreate(dir, name string, size int, replace bool) *httptest.ResponseRecorder {
 	meta := []string{
 		"filename " + base64.StdEncoding.EncodeToString([]byte(name)),
 		"dir " + base64.StdEncoding.EncodeToString([]byte(dir)),
@@ -50,8 +50,13 @@ func (c *uploader) create(dir, name string, size int, replace bool) string {
 	req := c.req("POST", "/api/uploads", nil)
 	req.Header.Set("Upload-Length", strconv.Itoa(size))
 	req.Header.Set("Upload-Metadata", strings.Join(meta, ","))
+	return c.h.do(req)
+}
 
-	w := c.h.do(req)
+// create reserves an upload and returns its id.
+func (c *uploader) create(dir, name string, size int, replace bool) string {
+	c.t.Helper()
+	w := c.tryCreate(dir, name, size, replace)
 	if w.Code != http.StatusCreated {
 		c.t.Fatalf("creating an upload: %d %s", w.Code, w.Body.String())
 	}

@@ -77,8 +77,11 @@ func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) {
 	defer root.Close()
 
 	_, replace := meta["replace"]
-	u, err := files.NewUpload(s.db, userFrom(r.Context()).ID, root,
-		meta["dir"], meta["filename"], size, replace)
+	// The account's own allowance, alongside the volume's reserve that
+	// NewUpload already asks storage about. Zero is unlimited.
+	me := userFrom(r.Context())
+	u, err := files.NewUpload(s.db, me.ID, root,
+		meta["dir"], meta["filename"], size, replace, me.QuotaBytes)
 	if err != nil {
 		fileError(w, err)
 		return

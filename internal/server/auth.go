@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/fosslife/drive/internal/auth"
+	"github.com/fosslife/drive/internal/index"
 )
 
 // errAuthRequired is what a route behind requireAuth answers an anonymous
@@ -212,7 +213,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 // request because it is counted from the index, never stored.
 type accountInfo struct {
 	*auth.User
-	auth.Usage
+	index.Usage
 }
 
 func (s *Server) accountInfo(u *auth.User) (accountInfo, error) {

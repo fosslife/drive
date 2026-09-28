@@ -22,10 +22,10 @@
 
 ## 4. Quota enforcement
 
-- [ ] 4.1 Refuse upload creation when `usage + pending + Upload-Length` exceeds the account's quota, before any byte is stored, with a message naming the quota and the pending reservation; verify a test asserts the refusal, that no temp file was created, and that an account with no quota is unaffected
-- [ ] 4.2 Keep the two refusals distinguishable: the free-space reserve keeps reporting the volume, the quota reports the account; verify a test asserts each refusal's message and that neither wording appears in the other's case
-- [ ] 4.3 Leave every non-write path working over quota; verify a test puts an account past its quota and asserts list, search, download, thumbnail, trash, restore, and permanent delete all succeed, and that permanent delete lowers usage enough for the next upload to be accepted
-- [ ] 4.4 Confirm concurrent uploads cannot race past the limit; verify a test starts several uploads at once against a quota that fits only one and asserts exactly one is accepted
+- [x] 4.1 Refuse upload creation when `usage + pending + Upload-Length` exceeds the account's quota, before any byte is stored, with a message naming the quota and the pending reservation; verify a test asserts the refusal, that no temp file was created, and that an account with no quota is unaffected
+- [x] 4.2 Keep the two refusals distinguishable: the free-space reserve keeps reporting the volume, the quota reports the account; verify a test asserts each refusal's message and that neither wording appears in the other's case
+- [x] 4.3 Leave every non-write path working over quota; verify a test puts an account past its quota and asserts list, search, download, thumbnail, trash, restore, and permanent delete all succeed, and that permanent delete lowers usage enough for the next upload to be accepted
+- [x] 4.4 Confirm concurrent uploads cannot race past the limit; verify a test starts several uploads at once against a quota that fits only one and asserts exactly one is accepted
 
 ## 5. Instance state and rescan
 

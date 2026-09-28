@@ -158,3 +158,46 @@ func JoinPath(dir, name string) string {
 	}
 	return dir + "/" + name
 }
+
+// Querier is the part of *DB that a read needs, and *sql.Tx satisfies it too.
+// It exists so one query can be asked either on its own or inside somebody
+// else's transaction.
+type Querier interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// Usage is what one account occupies.
+type Usage struct {
+	// Bytes is stored files plus trashed files: trash has not been freed.
+	Bytes int64 `json:"usage_bytes"`
+	Files int64 `json:"file_count"`
+	// Pending is the declared size of uploads that have not finished. They
+	// count against a quota — without them ten concurrent uploads each pass a
+	// check the ten of them together blow past — and the upload retention
+	// sweep is what releases an abandoned one.
+	Pending int64 `json:"pending_bytes"`
+}
+
+// MeasureUsage counts what an account holds rather than reading a total kept
+// somewhere. The index is the disposable half of this system: a stored counter
+// would be authoritative state for user-visible behaviour living in the half
+// that gets thrown away and rebuilt, with a drift bug waiting at every path
+// that frees or consumes bytes.
+//
+// ponytail: one aggregate over one user's rows, at upload creation and when an
+// administrator opens a screen. A maintained counter only if a folder of
+// 100,000 files makes it show up in upload latency.
+func MeasureUsage(q Querier, userID int64) (Usage, error) {
+	var u Usage
+	err := q.QueryRow(`SELECT COALESCE(SUM(size), 0), COUNT(*) FROM files
+	                    WHERE user_id = ? AND kind = 'file' AND state IN ('present', 'trashed')`,
+		userID).Scan(&u.Bytes, &u.Files)
+	if err != nil {
+		return Usage{}, fmt.Errorf("measuring account usage: %w", err)
+	}
+	if err := q.QueryRow(`SELECT COALESCE(SUM(size), 0) FROM uploads WHERE user_id = ?`,
+		userID).Scan(&u.Pending); err != nil {
+		return Usage{}, fmt.Errorf("measuring account usage: %w", err)
+	}
+	return u, nil
+}
