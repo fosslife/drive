@@ -47,8 +47,11 @@ how it got here is worse than no record.
 - The scanner is one goroutine started with `go scanner.Run(ctx)` after the listener is open. One
   root failing is logged and skipped, not fatal: an unmounted disk for one account must not stall
   the others.
-- `GET /api/scan` reports progress and `indexing`, authenticated. There is deliberately no HTTP
-  route that triggers a scan; `Scanner.Trigger()` is the on-demand entry point.
+- `GET /api/scan` reports progress and `indexing`, authenticated. `POST /api/admin/scan` asks for one,
+  administrator only: it calls `Scanner.Trigger()`, which queues at most one pass, so the endpoint over it
+  is idempotent and a scan already running is left alone.
+- A failed scan's error is kept in `scan.Status` until a later scan **succeeds**, not until the next one
+  starts. Clearing it at the start would hide a broken instance for as long as a scan takes.
 
 ## Accounts, sessions, tokens
 
@@ -76,6 +79,43 @@ how it got here is worse than no record.
 - CSRF: `sameOrigin` runs outside authentication and refuses any unsafe method that shows neither
   `Sec-Fetch-Site: same-origin|none` nor an `Origin` matching `Host`. A bearer token is exempt —
   browsers never attach one, and requiring an `Origin` from curl would break every API client.
+
+## Administration and quotas
+
+- **One administrator, assigned by first-run setup and never granted or revoked.** The first design had
+  role management guarded by two rules — refuse to remove the last enabled administrator, refuse to act on
+  your own account — and the first rule turned out to be unreachable over HTTP: the caller is an enabled
+  administrator, so a *different* enabled administrator as the target means two exist. Deleting the
+  capability made the invariant structural instead of enforced. What survives is one comparison
+  (`refuseSelf`): you cannot delete or disable your own account. Rejected: keeping the unreachable guard as
+  defence in depth for a caller that does not exist.
+- A locked-out administrator has no way back in — first-run setup only reopens when the instance has no
+  accounts at all. That is a real gap, recorded in `BACKLOG.md`, and it predates this decision: hand-over
+  needed you to still be signed in, so it never helped the case that happens.
+- **Usage is counted, never stored.** `index.MeasureUsage` sums the account's present and trashed file rows
+  plus the declared size of its unfinished uploads. A `users.usage_bytes` counter would be faster and would
+  put authoritative state for user-visible behaviour in the disposable half of the system, with a drift bug
+  waiting at every path that frees or consumes bytes.
+- Trashed bytes count against a quota because they are still on the volume. Thumbnails do not: they are
+  derived data the system chose to create, and refusing to make one would be charging a user for the
+  server's own cache.
+- **In-flight uploads reserve their declared size.** Without that term, ten concurrent uploads each pass a
+  check the ten of them together blow past. The check and the reservation are one transaction in
+  `files.NewUpload`, so uploads started at the same moment cannot each find the same room.
+- The quota check lives above `storage`, not inside it: giving the bytes-and-paths layer a database handle
+  to answer "whose root is this and what is their allowance" inverts the layering for one caller.
+  `storage.ErrNoSpace` and `files.ErrOverQuota` are separate errors on purpose — one is answered by
+  deleting your own files, the other by the operator buying a disk.
+- **Sessions are invalidated by an epoch**, `users.sessions_valid_from`, compared against the login time
+  the session records. Rejected: deleting that user's rows from the scs session table, which means decoding
+  a third party's storage format and silently stops working on a library upgrade. Both timestamps are unix
+  **nanoseconds**: at second resolution a reset and the login right after it are indistinguishable, so
+  either the reset misses the session or the fresh login is refused by its own account's epoch.
+- API tokens survive a password change. A token is revoked by revoking it, and a reset that silently killed
+  an account's automation would surprise the wrong person.
+- `AuthenticateToken` resolves the token row and then calls `Store.Active`, rather than joining and scanning
+  the user itself. Its own column list had already missed `quota_bytes` once, which let a token upload past
+  a quota the browser was held to; one place builds a `User` now.
 
 ## First-run setup
 

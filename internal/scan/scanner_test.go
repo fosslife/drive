@@ -321,3 +321,48 @@ func TestFutureSchemaIsRefusedNotReset(t *testing.T) {
 		}
 	}
 }
+
+// 5.1: a failed scan is news until it stops being true. Clearing the error when
+// the next scan starts would hide a broken instance for as long as a scan
+// takes, which on a large root is minutes.
+func TestAFailedScanIsReportedUntilOneSucceeds(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission bits do not make a directory unreadable")
+	}
+	f := setup(t)
+	f.put(t, "locked/a.txt", "x")
+	s := f.scanner(time.Hour)
+
+	locked := filepath.Join(f.dir, "locked")
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ScanAll(t.Context()); err == nil {
+		t.Fatal("ScanAll over an unreadable root succeeded, want an error")
+	}
+	failed := s.Status()
+	if failed.Error == "" || failed.Started.IsZero() || failed.Finished.IsZero() {
+		t.Fatalf("status after a failed scan = %+v, want an error and both timestamps", failed)
+	}
+
+	// The error is still there while the next scan is under way: nothing has
+	// yet shown that the problem is gone.
+	s.begin()
+	if during := s.Status(); during.Error != failed.Error {
+		t.Errorf("error during the next scan = %q, want the previous %q kept", during.Error, failed.Error)
+	}
+	s.finish(nil)
+
+	if err := os.Chmod(locked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ScanAll(t.Context()); err != nil {
+		t.Fatalf("ScanAll after the root came back: %v", err)
+	}
+	if got := s.Status(); got.Error != "" {
+		t.Errorf("error after a successful scan = %q, want it cleared", got.Error)
+	}
+	if got := s.Status(); got.TookMS < 0 {
+		t.Errorf("took_ms = %d", got.TookMS)
+	}
+}

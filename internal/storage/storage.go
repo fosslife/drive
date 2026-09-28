@@ -578,9 +578,17 @@ func (r *Root) checkSpace(size int64) error {
 }
 
 func freeBytes(dir string) (int64, error) {
+	free, _, err := Space(dir)
+	return free, err
+}
+
+// Space reports the bytes available to this process and the size of the volume
+// holding dir. Available, not free: what root may still write is not what the
+// drive may.
+func Space(dir string) (free, total int64, err error) {
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(dir, &st); err != nil {
-		return 0, fmt.Errorf("checking free space on %s: %w", dir, err)
+		return 0, 0, fmt.Errorf("checking free space on %s: %w", dir, err)
 	}
-	return int64(st.Bavail) * int64(st.Bsize), nil
+	return int64(st.Bavail) * int64(st.Bsize), int64(st.Blocks) * int64(st.Bsize), nil
 }

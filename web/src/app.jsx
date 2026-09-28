@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { AccountCard, Accounts } from './admin.jsx'
 import { api } from './api.js'
 import { Browser } from './browser.jsx'
 import { Survey } from './icons.jsx'
@@ -46,15 +47,23 @@ export function App() {
   return <Shell user={user} route={route} navigate={navigate} onSignedOut={() => setUser(null)} />
 }
 
-// The four series of the collection. The roman numeral is the furniture a
-// finding aid prints in its margin; the plain word beside it is what anyone
-// actually reads, and it stays the word the rest of the interface uses.
-const tabs = [
-  ['/', 'I', 'Files'],
-  ['/trash', 'II', 'Trash'],
-  ['/shares', 'III', 'Shares'],
-  ['/tokens', 'IV', 'API tokens'],
-]
+// The series of the collection. The roman numeral is the furniture a finding
+// aid prints in its margin; the plain word beside it is what anyone actually
+// reads, and it stays the word the rest of the interface uses.
+//
+// Accounts is a fifth series and only an administrator has it. The account's
+// own card is deliberately not a series: it is not part of the collection, so
+// it hangs off the name in the masthead instead.
+const seriesFor = (user) => {
+  const tabs = [
+    ['/', 'I', 'Files'],
+    ['/trash', 'II', 'Trash'],
+    ['/shares', 'III', 'Shares'],
+    ['/tokens', 'IV', 'API tokens'],
+  ]
+  if (user.is_admin) tabs.push(['/accounts', 'V', 'Accounts'])
+  return tabs
+}
 
 const isCurrent = (to, path) => (to === '/' ? path === '/' || path.startsWith('/browse') : path === to)
 
@@ -66,10 +75,18 @@ function Shell({ user, route, navigate, onSignedOut }) {
     navigate('/')
   }
 
+  const tabs = seriesFor(user)
+
   let screen = <Browser route={route} navigate={navigate} />
   if (path === '/trash') screen = <Trash />
   else if (path === '/shares') screen = <Shares navigate={navigate} />
   else if (path === '/tokens') screen = <Tokens />
+  else if (path === '/account') screen = <AccountCard user={user} />
+  // Someone who types the address without the role gets the answer the API
+  // would give them, not a screen that loads and then fails every request.
+  else if (path === '/accounts') {
+    screen = user.is_admin ? <Accounts /> : <p className="centred">Administrator access required.</p>
+  }
 
   const at = tabs.findIndex(([to]) => isCurrent(to, path))
 
@@ -80,7 +97,17 @@ function Shell({ user, route, navigate, onSignedOut }) {
           <span className="wordmark">drive</span>
           <span className="spacer" />
           <Indexing />
-          <span className="who">{user.username}</span>
+          <a
+            className="who"
+            href="/account"
+            aria-current={path === '/account' ? 'page' : undefined}
+            onClick={(e) => {
+              e.preventDefault()
+              navigate('/account')
+            }}
+          >
+            {user.username}
+          </a>
           <button onClick={signOut}>Sign out</button>
         </div>
         <nav className="series" aria-label="Series">

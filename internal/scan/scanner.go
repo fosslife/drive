@@ -36,8 +36,15 @@ type Status struct {
 	Seen     int       `json:"seen"`           // entries walked in the current or last scan
 	Started  time.Time `json:"started,omitzero"`
 	Finished time.Time `json:"finished,omitzero"`
-	Scans    int       `json:"scans"` // completed scans since startup
-	Error    string    `json:"error,omitempty"`
+	// TookMS is how long the last completed scan ran for. Milliseconds rather
+	// than a time.Duration because a Duration marshals as nanoseconds and every
+	// client would have to know that.
+	TookMS int64 `json:"took_ms"`
+	Scans  int   `json:"scans"` // completed scans since startup
+	// Error is what the last scan failed with, kept until a later scan
+	// succeeds. Clearing it when the next scan starts would hide a failing
+	// instance for as long as a scan takes, which on a large root is minutes.
+	Error string `json:"error,omitempty"`
 }
 
 // Indexing reports that the index may be incomplete: either a scan is running
@@ -164,7 +171,6 @@ func (s *Scanner) begin() {
 	s.status.Running = true
 	s.status.Started = time.Now()
 	s.status.Seen = 0
-	s.status.Error = ""
 }
 
 func (s *Scanner) finish(err error) {
@@ -173,7 +179,9 @@ func (s *Scanner) finish(err error) {
 	s.status.Running = false
 	s.status.Root = ""
 	s.status.Finished = time.Now()
+	s.status.TookMS = s.status.Finished.Sub(s.status.Started).Milliseconds()
 	s.status.Scans++
+	s.status.Error = ""
 	if err != nil {
 		s.status.Error = err.Error()
 	}

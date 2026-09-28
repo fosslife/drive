@@ -81,6 +81,7 @@ scripts/            release.sh (cross-compile), backup.sh (the procedure in docs
 ```
 
 Environment: `DRIVE_DATA_DIR`, `DRIVE_ADDR`, `DRIVE_MIN_FREE_BYTES` (plain byte count, default 1 GiB),
+`DRIVE_DEFAULT_QUOTA_BYTES` (plain byte count, default `0` meaning no limit; applies at account creation),
 `DRIVE_SCAN_INTERVAL` (Go duration, default 15m), `DRIVE_UPLOAD_RETENTION` (Go duration, default 24h),
 `DRIVE_TRASH_RETENTION` (Go duration, default 720h; `0` means never expire),
 `DRIVE_HOSTNAME` (public name; set it and the default address becomes `:443` and certificates become
@@ -104,6 +105,11 @@ users/<username>/         storage root, user files at their real paths
 - **Listings read the index; anything that changes something writes the filesystem first**, index second.
   If the process dies between the two, the reconciler agrees with the disk. No other order is correct.
 - **The reconciler has no delete path.** A vanished file marks its row missing; an unreadable root aborts the whole scan.
+- **A quota binds this application's writes and nothing else.** Files put into a root over SSH or rsync are
+  indexed like any other, whatever the account's limit says. Enforcing one at scan time would mean the
+  reconciler deleting or refusing user files, which the rule above forbids. What protects the volume from
+  filling is `DRIVE_MIN_FREE_BYTES`; a quota is about fairness between accounts, and the two refusals say
+  which one refused.
 - **Writes are atomic**: temp file → fsync file → rename → **fsync the parent directory**. The last step is the one people forget.
 - **File identity is assigned once and never reused** (`INTEGER PRIMARY KEY AUTOINCREMENT`).
 - **Never edit a shipped migration, append one.** Schema version is `PRAGMA user_version`.

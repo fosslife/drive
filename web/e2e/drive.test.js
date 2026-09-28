@@ -479,7 +479,7 @@ describe('the web interface', { skip: chromePath() ? false : 'no Chrome on this 
   // 13.13
   test('a full disk, a stale precondition and a refused upload each name their cause', async () => {
     const cases = [
-      { status: 507, body: { error: 'not enough free space' }, expect: /disk space/i },
+      { status: 507, body: { error: 'insufficient free space: 42 bytes free' }, expect: /free space/i },
       { status: 412, body: { error: 'the entry has changed since it was read' }, expect: /changed[\s\S]*reload/i },
     ]
     for (const c of cases) {
@@ -500,7 +500,7 @@ describe('the web interface', { skip: chromePath() ? false : 'no Chrome on this 
     // A refused upload names the file and the reason, and stays on screen
     // rather than vanishing with the queue.
     await home()
-    const release = await stub(page, '/api/uploads', { error: 'not enough free space' }, 507)
+    const release = await stub(page, '/api/uploads', { error: 'insufficient free space: 42 bytes free' }, 507)
     try {
       const source = join(drive.tmpDir, 'refused.bin')
       writeFileSync(source, 'x'.repeat(1024))
@@ -509,7 +509,7 @@ describe('the web interface', { skip: chromePath() ? false : 'no Chrome on this 
       await page.waitForSelector('.upload.error')
       const message = await text(page, '.upload.error')
       assert.match(message, /refused\.bin/)
-      assert.match(message, /disk space/i)
+      assert.match(message, /free space/i)
     } finally {
       await release()
     }

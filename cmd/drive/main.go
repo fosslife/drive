@@ -41,6 +41,7 @@ func main() {
 }
 
 func run() error {
+	started := time.Now()
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -94,7 +95,12 @@ func run() error {
 	// Secure cookies follow the listener: set unconditionally they would not be
 	// sent at all over the plaintext listener, which is every login failing.
 	sessions := auth.NewSessions(db, encrypted)
-	s := server.New(db, users, sessions, scanner.Status)
+	s := server.New(db, users, sessions, scanner.Status, server.Instance{
+		Version: Version,
+		DataDir: cfg.DataDir,
+		Started: started,
+		Scan:    scanner.Trigger,
+	})
 	s.SetReady(true)
 	httpSrv := &http.Server{
 		Handler:           s.Handler(),

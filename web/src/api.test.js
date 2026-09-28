@@ -6,9 +6,18 @@ import { explain, href } from './api.js'
 // 13.13: each of these must name its cause. The test asserts the words a user
 // would need to see, not the exact sentence.
 test('a full disk says the disk is full', () => {
-  const message = explain(507, 'not enough free space')
-  assert.match(message, /disk space/i)
+  const message = explain(507, 'insufficient free space: 42 bytes free, this write needs 900')
+  assert.match(message, /free space/i)
   assert.match(message, /trash|free/i)
+})
+
+// Two limits arrive as 507 and the answer to them is different: delete your own
+// files, or ask the operator for room. Neither may be described as the other.
+test('a refused upload names the limit that refused it', () => {
+  const quota = explain(507, 'account quota exceeded: this upload of 200 bytes does not fit in a quota of 100')
+  assert.match(quota, /quota/i)
+  assert.doesNotMatch(quota, /disk/i)
+  assert.doesNotMatch(explain(507, 'insufficient free space: 42 bytes free'), /quota/i)
 })
 
 test('a stale precondition says something changed elsewhere', () => {

@@ -88,9 +88,9 @@ func acmeTLS(ctx context.Context, cfg config.Config) (*tls.Config, error) {
 		Storage: &certmagic.FileStorage{Path: filepath.Join(cfg.CertsDir(), "acme")},
 	})
 	magic.Issuers = []certmagic.Issuer{certmagic.NewACMEIssuer(magic, certmagic.ACMEIssuer{
-		CA:           cfg.ACMEDirectory,
-		Email:        cfg.ACMEEmail,
-		Agreed:       true,
+		CA:             cfg.ACMEDirectory,
+		Email:          cfg.ACMEEmail,
+		Agreed:         true,
 		AltHTTPPort:    acmeHTTPPort,
 		AltTLSALPNPort: acmeTLSALPNPort,
 		TrustedRoots:   acmeTrustedRoots,

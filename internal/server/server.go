@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync/atomic"
+	"time"
 
 	"github.com/alexedwards/scs/v2"
 
@@ -18,9 +19,22 @@ import (
 	"github.com/fosslife/drive/web"
 )
 
+// Instance is what the process knows about itself and cannot work out from a
+// request: what it was built as, where its data is, and how to ask the scanner
+// for a pass. One struct rather than four more arguments to New.
+type Instance struct {
+	Version string
+	DataDir string
+	Started time.Time
+	// Scan asks the scanner for a pass. It never blocks and never queues a
+	// second one, which is what makes the endpoint over it idempotent.
+	Scan func()
+}
+
 type Server struct {
 	ready      atomic.Bool
 	scanStatus func() scan.Status
+	instance   Instance
 	db         *index.DB
 	users      *auth.Store
 	sessions   *scs.SessionManager
@@ -28,9 +42,16 @@ type Server struct {
 	thumbs     *thumb.Cache
 }
 
-func New(db *index.DB, users *auth.Store, sessions *scs.SessionManager, scanStatus func() scan.Status) *Server {
+func New(db *index.DB, users *auth.Store, sessions *scs.SessionManager, scanStatus func() scan.Status, instance Instance) *Server {
+	if instance.Started.IsZero() {
+		instance.Started = time.Now()
+	}
+	if instance.Scan == nil {
+		instance.Scan = func() {}
+	}
 	return &Server{
 		scanStatus: scanStatus,
+		instance:   instance,
 		db:         db,
 		users:      users,
 		sessions:   sessions,
@@ -101,6 +122,9 @@ func (s *Server) routes() []route {
 		{"GET /api/tokens", false, s.listTokens},
 		{"POST /api/tokens", false, s.createToken},
 		{"DELETE /api/tokens/{id}", false, s.revokeToken},
+
+		{"GET /api/admin/instance", false, s.requireAdmin(s.instanceState)},
+		{"POST /api/admin/scan", false, s.requireAdmin(s.rescan)},
 
 		{"GET /api/admin/users", false, s.requireAdmin(s.listUsers)},
 		{"POST /api/admin/users", false, s.requireAdmin(s.createUser)},

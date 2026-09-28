@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,6 +32,9 @@ type harness struct {
 	users   *auth.Store
 	dataDir string
 	status  scan.Status // what the scanner reports; assign to change it
+	// scansAsked counts what reached the scanner, so a test can tell a request
+	// that was accepted from one that actually asked for work.
+	scansAsked atomic.Int64
 }
 
 func newHarness(t *testing.T) *harness { return newHarnessReserving(t, 0) }
@@ -48,7 +52,8 @@ func newHarnessReserving(t *testing.T, minFree int64) *harness {
 
 	h := &harness{t: t, db: db, dataDir: dir, users: auth.NewStore(db, dir, minFree)}
 	// secure=true is the HTTPS case the spec describes; main follows the listener.
-	h.Server = New(db, h.users, auth.NewSessions(db, true), func() scan.Status { return h.status })
+	h.Server = New(db, h.users, auth.NewSessions(db, true), func() scan.Status { return h.status },
+		Instance{Version: "test", DataDir: dir, Scan: func() { h.scansAsked.Add(1) }})
 	h.SetReady(true)
 	return h
 }

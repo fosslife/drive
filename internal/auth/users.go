@@ -41,7 +41,10 @@ type User struct {
 	Disabled bool   `json:"disabled"`
 	// QuotaBytes is the account's allowance for new bytes. Zero is unlimited.
 	QuotaBytes int64 `json:"quota_bytes"`
-	CreatedAt  int64 `json:"created_at"`
+	// CreatedAt is a timestamp rather than the unix integer the column holds:
+	// the rest of this API dates things in RFC 3339, and one field in seconds
+	// would be a second convention for every client to learn.
+	CreatedAt time.Time `json:"created_at"`
 	// StorageRoot is relative to the data directory, e.g. users/ada. The data
 	// directory moves between a host and a container; the roots inside it do not.
 	StorageRoot string `json:"-"`
@@ -114,7 +117,8 @@ func (s *Store) Create(username, password string, admin bool) (*User, error) {
 		return nil, fmt.Errorf("creating account %q: %w", username, err)
 	}
 
-	u := &User{ID: id, Username: username, IsAdmin: admin, QuotaBytes: s.DefaultQuota, CreatedAt: createdAt, StorageRoot: root}
+	u := &User{ID: id, Username: username, IsAdmin: admin, QuotaBytes: s.DefaultQuota,
+		CreatedAt: time.Unix(createdAt, 0), StorageRoot: root}
 	dir, err := s.Root(u)
 	if err != nil {
 		// No account without a usable root: undo rather than leave one that
@@ -129,10 +133,14 @@ func (s *Store) Create(username, password string, admin bool) (*User, error) {
 const userColumns = `id, username, is_admin, disabled, quota_bytes, created_at, storage_root`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
-	var u User
-	if err := row.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.Disabled, &u.QuotaBytes, &u.CreatedAt, &u.StorageRoot); err != nil {
+	var (
+		u       User
+		created int64
+	)
+	if err := row.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.Disabled, &u.QuotaBytes, &created, &u.StorageRoot); err != nil {
 		return nil, err
 	}
+	u.CreatedAt = time.Unix(created, 0)
 	return &u, nil
 }
 
@@ -227,11 +235,12 @@ func (s *Store) List() ([]*User, error) {
 // nor the time it took says whether the account exists.
 func (s *Store) Authenticate(username, password string) (*User, error) {
 	var (
-		u    User
-		hash string
+		u       User
+		hash    string
+		created int64
 	)
 	err := s.db.QueryRow(`SELECT `+userColumns+`, password_hash FROM users WHERE username = ?`, username).
-		Scan(&u.ID, &u.Username, &u.IsAdmin, &u.Disabled, &u.QuotaBytes, &u.CreatedAt, &u.StorageRoot, &hash)
+		Scan(&u.ID, &u.Username, &u.IsAdmin, &u.Disabled, &u.QuotaBytes, &created, &u.StorageRoot, &hash)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		equaliseTiming(password)
@@ -242,6 +251,7 @@ func (s *Store) Authenticate(username, password string) (*User, error) {
 	if !VerifyPassword(hash, password) || u.Disabled {
 		return nil, ErrInvalidCredentials
 	}
+	u.CreatedAt = time.Unix(created, 0)
 	return &u, nil
 }
 

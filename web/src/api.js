@@ -38,7 +38,12 @@ export function explain(status, serverMessage) {
     case 429:
       return serverMessage || 'Too many attempts. Wait a moment and try again.'
     case 507:
-      return `Not enough disk space on the server${serverMessage ? `: ${serverMessage}` : ''}. Free some space or empty the trash, then try again.`
+      // Two different limits arrive here: the volume's free-space reserve and
+      // the account's own quota. The server says which, so its sentence leads
+      // rather than being appended to a guess about disks.
+      return serverMessage
+        ? `${serverMessage}. Free some space or empty the trash, then try again.`
+        : 'Not enough disk space on the server. Free some space or empty the trash, then try again.'
     default:
       return serverMessage || `The server refused the request (${status}).`
   }

@@ -115,6 +115,21 @@ above or beside it — no account, no sign-in, read-only. Revoke it and it stops
   <img src="docs/screenshots/share.png" alt="A shared folder as a stranger sees it: a read-only listing with download links" width="100%">
 </p>
 
+## Accounts
+
+The first account is the administrator, created by the setup link above. It gets an **Accounts**
+screen the others do not: hand out an account, disable one, reset a forgotten password, set a
+storage limit, and see what each person is holding alongside the drive's own free space.
+
+Everyone, administrator included, has their own files at their own paths. Administering an account
+never opens what is inside it — there is no screen, and no endpoint, that reads another account's
+files. Deleting an account removes the login and leaves the files on disk, so re-creating it with
+the same name gives them back.
+
+Administrator is not a role you can hand out: the instance keeps the one it was set up with. A
+storage limit refuses the next upload and nothing else — it never deletes or hides what is already
+there, and it cannot hold back files you put into the drive over SSH.
+
 ## Configuration
 
 There is no config file and there will never be one. Every value has a working default; the
@@ -128,6 +143,7 @@ environment overrides it.
 | `DRIVE_ACME_EMAIL` | unset | Where the CA sends expiry warnings |
 | `DRIVE_ACME_DIRECTORY` | Let's Encrypt | Point at a staging or private CA |
 | `DRIVE_MIN_FREE_BYTES` | `1073741824` (1 GiB) | Headroom kept free; writes are refused below it |
+| `DRIVE_DEFAULT_QUOTA_BYTES` | `0` (no limit) | Storage limit a newly created account starts with |
 | `DRIVE_SCAN_INTERVAL` | `15m` | How often the index catches up with the disk |
 | `DRIVE_UPLOAD_RETENTION` | `24h` | How long an interrupted upload waits to be resumed |
 | `DRIVE_TRASH_RETENTION` | `720h` (30 days) | How long deleted files stay recoverable. `0` means forever |

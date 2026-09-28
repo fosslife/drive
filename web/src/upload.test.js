@@ -109,7 +109,7 @@ test('a full disk stops the upload instead of retrying into the same answer', as
     uploadFile(new File([sourceOf(1024)], 'stored.bin'), { fetch: counting, backoff: () => Promise.resolve() }),
     (err) => {
       assert.ok(err instanceof ApiError)
-      assert.match(err.message, /disk space/i)
+      assert.match(err.message, /free space/i)
       return true
     },
   )

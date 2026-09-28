@@ -5,7 +5,7 @@ import { formatDate, formatSize } from './format.js'
 
 // useCollection is the shape every one of these screens has: fetch a list, run
 // an operation, refetch, and show the reason when the operation is refused.
-function useCollection(url, extract = (body) => body) {
+export function useCollection(url, extract = (body) => body) {
   const [items, setItems] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -27,14 +27,18 @@ function useCollection(url, extract = (body) => body) {
     reload()
   }, [reload])
 
+  // The refusal has to outlive the refetch that follows it. Setting it before
+  // reload() meant every refused action flashed its reason and then cleared it,
+  // because a successful reload clears the error it did not cause.
   const act = async (fn) => {
+    let refused = ''
     try {
       await fn()
-      setError('')
     } catch (err) {
-      setError(err.message)
+      refused = err.message
     }
-    reload()
+    await reload()
+    if (refused) setError(refused)
   }
 
   return { items, error, loading, act }
@@ -45,7 +49,7 @@ function useCollection(url, extract = (body) => body) {
 // column saying what this series is and what its actions really do. The notes
 // are the only onboarding anybody gets, so they are written for the relative
 // who was handed an account and never read anything else.
-function Panel({ title, error, loading, children, actions, reveal, notes }) {
+export function Panel({ title, error, loading, children, actions, reveal, notes }) {
   return (
     <main className="panel">
       <div className="toolbar">
@@ -65,7 +69,7 @@ function Panel({ title, error, loading, children, actions, reveal, notes }) {
   )
 }
 
-const Extent = ({ count, unit, sub }) => (
+export const Extent = ({ count, unit, sub }) => (
   <section>
     <h2>Extent</h2>
     <p className="extent-figure live">
