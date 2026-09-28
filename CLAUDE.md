@@ -55,6 +55,13 @@ Point `TMPDIR` at real disk for the 4 GB one; `/tmp` here is a 16 GB tmpfs.
 The fsync-ordering test needs `strace` and skips without it. `qemu-user-static` is not installed, so the
 arm64 release artifact is checked by reading its ELF header and skips the part that runs it.
 
+This machine has `net.ipv4.ip_unprivileged_port_start=80`, so it binds `:443` without privileges and CI
+does not. A test that passes here and fails there is usually that; reproduce CI's side with
+
+```sh
+unshare -r -n sh -c 'ip link set lo up; capsh --drop=cap_net_bind_service -- -c "go test ./..."'
+```
+
 ## Layout
 
 ```

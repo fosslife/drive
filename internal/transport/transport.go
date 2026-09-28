@@ -25,10 +25,16 @@ import (
 
 // Test seams. An ACME exchange is only worth testing against a real CA, and a
 // CA that runs inside the test speaks HTTPS with its own root and validates on
-// a port the test picked. Both are zero in production.
+// ports the test picked. All three are zero in production.
+//
+// Both challenge ports have to be here, not just one: the CA chooses which
+// challenge to offer, and for the one certmagic cannot solve on a port the test
+// owns it falls back to binding the real :443 — which an unprivileged process
+// cannot do, so whether the test passed came down to the CA's coin flip.
 var (
 	acmeTrustedRoots *x509.CertPool
 	acmeHTTPPort     int
+	acmeTLSALPNPort  int
 )
 
 // Listen opens cfg.Addr, wrapped in TLS when a hostname was configured. The
@@ -85,8 +91,9 @@ func acmeTLS(ctx context.Context, cfg config.Config) (*tls.Config, error) {
 		CA:           cfg.ACMEDirectory,
 		Email:        cfg.ACMEEmail,
 		Agreed:       true,
-		AltHTTPPort:  acmeHTTPPort,
-		TrustedRoots: acmeTrustedRoots,
+		AltHTTPPort:    acmeHTTPPort,
+		AltTLSALPNPort: acmeTLSALPNPort,
+		TrustedRoots:   acmeTrustedRoots,
 	})}
 	if err := magic.ManageSync(ctx, []string{cfg.Hostname}); err != nil {
 		return nil, fmt.Errorf("certificate for %s: %w (unset %s to serve plaintext behind a proxy instead)",

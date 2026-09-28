@@ -24,13 +24,14 @@ import (
 // 14.1: a configured hostname gets a real certificate from a real ACME
 // exchange, and serves it. Staging Let's Encrypt cannot validate a machine
 // with no public name, so the staging CA runs inside the test: Pebble is the
-// same code path as a live CA — account, order, HTTP-01 challenge, CSR,
-// issuance — with a root nobody trusts.
+// same code path as a live CA — account, order, challenge, CSR, issuance —
+// with a root nobody trusts. Which challenge it offers is its choice, so both
+// are pointed at ports this test owns.
 func TestACMEObtainsAndServesACertificate(t *testing.T) {
-	directory, roots, challengePort := startPebble(t)
+	directory, roots, httpPort, alpnPort := startPebble(t)
 
-	acmeTrustedRoots, acmeHTTPPort = roots, challengePort
-	t.Cleanup(func() { acmeTrustedRoots, acmeHTTPPort = nil, 0 })
+	acmeTrustedRoots, acmeHTTPPort, acmeTLSALPNPort = roots, httpPort, alpnPort
+	t.Cleanup(func() { acmeTrustedRoots, acmeHTTPPort, acmeTLSALPNPort = nil, 0, 0 })
 
 	cfg := config.Config{
 		DataDir:       t.TempDir(),
@@ -70,9 +71,9 @@ func TestACMEObtainsAndServesACertificate(t *testing.T) {
 }
 
 // startPebble runs the ACME CA in this process and returns its directory URL,
-// the pool that trusts what it issues, and the port its validator will look on
-// for HTTP-01 challenges.
-func startPebble(t *testing.T) (directory string, roots *x509.CertPool, challengePort int) {
+// the pool that trusts what it issues, and the two ports its validator will
+// look on: one for HTTP-01, one for TLS-ALPN-01.
+func startPebble(t *testing.T) (directory string, roots *x509.CertPool, httpPort, alpnPort int) {
 	t.Helper()
 	// Pebble sleeps a random few seconds before validating, to catch clients
 	// that assume it is instant. We are not testing patience.
@@ -81,8 +82,8 @@ func startPebble(t *testing.T) (directory string, roots *x509.CertPool, challeng
 	logger := log.New(testWriter{t}, "pebble ", 0)
 	store := db.NewMemoryStore()
 	authority := ca.New(logger, store, "", "ecdsa", 0, 1, map[string]ca.Profile{"default": {Description: "default"}})
-	challengePort = freePort(t)
-	validator := va.New(logger, challengePort, freePort(t), false, "", store)
+	httpPort, alpnPort = freePort(t), freePort(t)
+	validator := va.New(logger, httpPort, alpnPort, false, "", store)
 	front := wfe.New(logger, store, validator, authority, []string{"pebble.test"}, false, false, 0, 0)
 
 	// The CA speaks HTTPS, so it needs a certificate of its own. httptest's
@@ -109,7 +110,7 @@ func startPebble(t *testing.T) (directory string, roots *x509.CertPool, challeng
 	if block, _ := pem.Decode(rootPEM); block == nil {
 		t.Fatal("pebble served no root certificate")
 	}
-	return srv.URL + wfe.DirectoryPath, roots, challengePort
+	return srv.URL + wfe.DirectoryPath, roots, httpPort, alpnPort
 }
 
 // freePort picks a port nobody is using, for a listener something else opens.
