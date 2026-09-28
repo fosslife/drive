@@ -67,24 +67,38 @@ right answer behind a proxy that terminates TLS, on a Tailscale address, or on l
 
 ### Or run it in a container
 
+No clone and no toolchain: one file is the whole deployment.
+
 ```sh
+curl -O https://raw.githubusercontent.com/fosslife/drive/master/compose.yml
 podman compose up -d             # docker compose works too, the file is the same
-podman compose up -d --build     # after changing any source
+podman compose logs drive        # the setup URL is printed here
 ```
 
-One service, one volume, one port. The image contains the same static binary and nothing else — no
-runtime, no database server, no web server.
+One service, one volume, one port. The image is `ghcr.io/fosslife/drive`, published for amd64 and
+arm64 on every release tag, and it contains the same static binary and nothing else — no runtime, no
+database server, no web server. Upgrading is `podman compose pull && podman compose up -d`.
+
+The setup URL in the log says `localhost`, because a container cannot know the name you reach it by.
+Keep the token, swap the host.
 
 <details>
-<summary>Why <code>--build</code>, and why the file is named <code>Dockerfile</code></summary>
+<summary>Building the image yourself, and why the file is named <code>Dockerfile</code></summary>
 
-`up` starts the image it already has and only builds when there is none, so after changing any
-source, pass `--build` or the container will faithfully serve the previous version. `down -v` will
-not help — it deletes your data volume and leaves the stale image untouched.
+```sh
+podman build -t ghcr.io/fosslife/drive:latest .
+```
+
+Tagged as the published image, `compose.yml` runs that instead of pulling — the tag is the only
+thing the two paths share. `down -v` is not how you pick up a new build: it deletes your data volume
+and leaves the image untouched.
 
 The build file is called `Dockerfile` rather than `Containerfile` because that is the name every
 tool agrees on: Compose only ever looks for `Dockerfile`, while `podman build` accepts it as a
 fallback. The podman-native name works with `podman build` and breaks `podman compose`.
+
+Both stages build for the machine you run them on and cross-compile for the target, so the two
+release architectures are two native builds rather than one of them emulated.
 
 </details>
 
@@ -176,7 +190,7 @@ go run ./cmd/drive                   # a second or two, then it is serving
 
 Stop it, run it again. A watcher would save you the keystroke and cost a dependency; the compile is
 already faster than a container restart. Run it on `:8080` and the Vite proxy above finds it with no
-configuration. Rebuild the image only to ship one — that is what `--build` is for.
+configuration. Build the image only to check the image; releases build their own.
 
 </details>
 

@@ -7,23 +7,31 @@
 #
 # The interface is built here rather than assumed, because `go build` does not
 # run it and an image missing web/dist would serve an API and an apology.
-FROM docker.io/library/node:22-alpine AS web
+#
+# Both build stages are pinned to the *build* machine's architecture and produce
+# output for the target one: the bundle is JavaScript and cares about neither,
+# and Go cross-compiles. That is what keeps a two-architecture image a native
+# build twice over instead of an arm64 `npm ci` crawling under QEMU.
+FROM --platform=$BUILDPLATFORM docker.io/library/node:22-alpine AS web
 WORKDIR /src
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
 RUN npm run build
 
-FROM docker.io/library/golang:1.27-alpine AS build
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.27-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/dist ./web/dist
 ARG VERSION=dev
+# Set by the builder on a `--platform` build and empty otherwise, which the Go
+# toolchain reads as "this machine" — so a plain `podman build` still works.
+ARG TARGETARCH
 # CGO stays off: modernc.org/sqlite is pure Go, so the result is one static
 # file that runs on scratch and cross-compiles without a C toolchain.
-RUN CGO_ENABLED=0 go build -ldflags "-X main.Version=${VERSION}" -o /drive ./cmd/drive
+RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -ldflags "-X main.Version=${VERSION}" -o /drive ./cmd/drive
 
 FROM scratch
 # The CA roots are the one thing the binary cannot carry: without them the ACME

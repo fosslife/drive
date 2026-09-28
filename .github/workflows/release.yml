@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
@@ -36,3 +37,21 @@ jobs:
       - run: gh release create "$GITHUB_REF_NAME" --generate-notes dist/*
         env:
           GH_TOKEN: ${{ github.token }}
+
+      # The image, from the same Dockerfile anyone can build locally. Published
+      # so that deploying is a compose file and nothing else — no clone, no
+      # toolchain, no binary to place. The two architectures are one buildx
+      # invocation because the Dockerfile cross-compiles; see the note in it.
+      #
+      # docker-container is the driver that can emit a multi-architecture
+      # manifest at all: the default one builds for the runner and stops.
+      - run: docker buildx create --use
+      - run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: |
+          docker buildx build --push \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg VERSION="$GITHUB_REF_NAME" \
+            -t "ghcr.io/$GITHUB_REPOSITORY:$GITHUB_REF_NAME" \
+            -t "ghcr.io/$GITHUB_REPOSITORY:latest" .
