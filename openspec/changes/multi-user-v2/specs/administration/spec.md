@@ -54,8 +54,11 @@ because trashed bytes have not been freed.
 ### Requirement: Account lifecycle
 
 An administrator SHALL be able to create an account with an initial password, disable an account, enable a
-disabled account, delete an account, grant administrator status, revoke administrator status, and set a new
-password for an account without knowing the old one.
+disabled account, delete an account, and set a new password for an account without knowing the old one.
+
+Administrator status SHALL NOT be among the things an administrator can change. It is assigned by
+first-run setup and by nothing else, so an instance has the administrator it started with; see the `auth`
+capability.
 
 Creating an account SHALL create its storage root. An account created with a username that was used before
 SHALL reattach to the existing storage root and its files, which is the documented recovery path after the
@@ -78,10 +81,10 @@ Deleting an account SHALL NOT delete a byte of file content: the storage root is
 - **WHEN** an administrator deletes an account and then re-creates it with the same username
 - **THEN** the re-created account sees its previous files after a rescan
 
-#### Scenario: Role change takes effect
+#### Scenario: An administrator cannot remove themselves
 
-- **WHEN** an administrator grants administrator status to another account
-- **THEN** that account can reach the administrative surface on its next request
+- **WHEN** an administrator deletes or disables their own account
+- **THEN** the operation is refused with a message naming the reason, and the account is unchanged
 
 ### Requirement: Per-account storage quota administration
 

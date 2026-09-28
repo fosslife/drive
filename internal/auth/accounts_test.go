@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -114,17 +116,16 @@ func TestSessionOlderThanTheEpochStopsResolving(t *testing.T) {
 	}
 }
 
-// 1.4: the three operations that can leave an instance with nobody able to
-// administer it, and the two rules that stop them.
-func TestLastAdministratorCannotBeLockedOut(t *testing.T) {
-	remove := map[string]func(s *Store, actor int64, name string) error{
+// 1.4: an administrator can administer every account but their own, and there
+// is no role to change — which is why one comparison is the whole of the rule.
+func TestAnAdministratorCannotRemoveThemselves(t *testing.T) {
+	operations := map[string]func(s *Store, actor int64, name string) error{
 		"delete":  func(s *Store, actor int64, name string) error { return s.Delete(actor, name) },
 		"disable": func(s *Store, actor int64, name string) error { return s.SetDisabled(actor, name, true) },
-		"demote":  func(s *Store, actor int64, name string) error { return s.SetAdmin(actor, name, false) },
 	}
 
-	for operation, apply := range remove {
-		t.Run(operation+" the only administrator", func(t *testing.T) {
+	for operation, apply := range operations {
+		t.Run(operation, func(t *testing.T) {
 			s, _ := testStore(t)
 			root, err := s.Create("root", "a long enough password", true)
 			if err != nil {
@@ -133,67 +134,55 @@ func TestLastAdministratorCannotBeLockedOut(t *testing.T) {
 			if _, err := s.Create("ada", "another long password", false); err != nil {
 				t.Fatal(err)
 			}
-			// Asked by somebody else, so the refusal is the last-administrator
-			// rule rather than the self-action one.
-			if err := apply(s, 0, "root"); !errors.Is(err, ErrLastAdmin) {
-				t.Errorf("%s the only administrator: %v, want ErrLastAdmin", operation, err)
+
+			if err := apply(s, root.ID, "root"); !errors.Is(err, ErrSelfAction) {
+				t.Errorf("%s your own account: %v, want ErrSelfAction", operation, err)
 			}
 			if u, err := s.Active(root.ID); err != nil || !u.IsAdmin {
 				t.Errorf("the administrator after a refused %s: %+v, %v", operation, u, err)
 			}
-			// The rule is about administrators, not about being last: an
-			// ordinary account goes whatever the administrator count is.
-			if err := apply(s, 0, "ada"); err != nil {
-				t.Errorf("%s an ordinary account with one administrator present: %v", operation, err)
-			}
-		})
 
-		t.Run(operation+" yourself", func(t *testing.T) {
-			s, _ := testStore(t)
-			root, err := s.Create("root", "a long enough password", true)
-			if err != nil {
-				t.Fatal(err)
+			if err := apply(s, root.ID, "ada"); err != nil {
+				t.Errorf("%s somebody else's account: %v", operation, err)
 			}
-			if _, err := s.Create("second", "another long password", true); err != nil {
-				t.Fatal(err)
-			}
-			if err := apply(s, root.ID, "root"); !errors.Is(err, ErrSelfAction) {
-				t.Errorf("%s your own account: %v, want ErrSelfAction", operation, err)
-			}
-			// Two administrators, and one of them is acting on the other.
-			if err := apply(s, root.ID, "second"); err != nil {
-				t.Errorf("%s another administrator: %v", operation, err)
+			if err := apply(s, 0, "nobody"); !errors.Is(err, ErrNotFound) {
+				t.Errorf("%s an unknown account: %v, want ErrNotFound", operation, err)
 			}
 		})
 	}
 
-	t.Run("unknown account", func(t *testing.T) {
-		s, _ := testStore(t)
-		if _, err := s.Create("root", "a long enough password", true); err != nil {
-			t.Fatal(err)
-		}
-		if err := s.Delete(0, "nobody"); !errors.Is(err, ErrNotFound) {
-			t.Errorf("deleting an unknown account: %v, want ErrNotFound", err)
-		}
-	})
-
-	t.Run("promotion is never guarded", func(t *testing.T) {
+	// Enabling is nobody's lockout, including your own.
+	t.Run("enabling is never refused", func(t *testing.T) {
 		s, _ := testStore(t)
 		root, err := s.Create("root", "a long enough password", true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ada, err := s.Create("ada", "another long password", false)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := s.SetAdmin(root.ID, "ada", true); err != nil {
-			t.Fatalf("granting administrator status: %v", err)
-		}
-		if u, err := s.Active(ada.ID); err != nil || !u.IsAdmin {
-			t.Errorf("ada after promotion: %+v, %v", u, err)
+		if err := s.SetDisabled(root.ID, "root", false); err != nil {
+			t.Errorf("enabling your own already-enabled account: %v", err)
 		}
 	})
+}
+
+// 1.4: the status exists, and nothing in the store can hand it out or take it
+// away. This is what makes "an instance keeps the administrator it was set up
+// with" a fact about the code rather than a rule somebody has to enforce.
+func TestNothingGrantsOrRevokesAdministratorStatus(t *testing.T) {
+	store := reflect.TypeOf(&Store{})
+	for i := range store.NumMethod() {
+		if name := store.Method(i).Name; strings.Contains(name, "Admin") {
+			t.Errorf("Store has a method %q; administrator status is written by first-run setup and by nothing else", name)
+		}
+	}
+
+	s, _ := testStore(t)
+	ada, err := s.Create("ada", "a long enough password", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u, err := s.Active(ada.ID); err != nil || u.IsAdmin {
+		t.Errorf("an account created through Create: %+v, %v, want an ordinary user", u, err)
+	}
 }
 
 // 1.5: usage is what the account occupies. Trash counts because its bytes are

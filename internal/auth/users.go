@@ -23,12 +23,10 @@ var (
 	// ErrNotFound is returned by every lookup and every update that matched no
 	// row, for accounts and for tokens alike.
 	ErrNotFound = errors.New("not found")
-	// ErrLastAdmin refuses the three operations that could leave an instance
-	// with nobody able to administer it.
-	ErrLastAdmin = errors.New("the last administrator cannot be deleted, disabled, or demoted")
-	// ErrSelfAction keeps losing the administrative surface someone else's
-	// decision. An administrator locking themselves out is always a mistake.
-	ErrSelfAction = errors.New("an administrator cannot delete, disable, or demote their own account")
+	// ErrSelfAction stops the one accident that can leave an instance with
+	// nobody able to administer it. Administrator status cannot be granted or
+	// revoked at all, so this is the only rule the account surface needs.
+	ErrSelfAction = errors.New("an administrator cannot delete or disable their own account")
 	// ErrInvalidValue is a refusal of what was asked for — an empty password, a
 	// negative quota — as opposed to a failure to carry it out. The two become
 	// different status codes, so they cannot be the same error.
@@ -250,22 +248,14 @@ func (s *Store) Authenticate(username, password string) (*User, error) {
 // SetDisabled turns an account off without touching its files or its root.
 //
 // actorID is the administrator asking, or 0 for no-one in particular — a test
-// or a future command line. See guarded for what the actor is checked against.
+// or a future command line.
 func (s *Store) SetDisabled(actorID int64, username string, disabled bool) error {
-	if !disabled {
-		// Enabling an account can lock nobody out of anything.
-		return s.affectOne(`UPDATE users SET disabled = 0 WHERE username = ?`, username)
+	if disabled {
+		if err := s.refuseSelf(actorID, username); err != nil {
+			return err
+		}
 	}
-	return s.guarded(actorID, username, `UPDATE users SET disabled = 1 WHERE username = ?`)
-}
-
-// SetAdmin grants or revokes administrator status. Granting is unguarded:
-// another administrator can only make the instance harder to lock out of.
-func (s *Store) SetAdmin(actorID int64, username string, admin bool) error {
-	if admin {
-		return s.affectOne(`UPDATE users SET is_admin = 1 WHERE username = ?`, username)
-	}
-	return s.guarded(actorID, username, `UPDATE users SET is_admin = 0 WHERE username = ?`)
+	return s.affectOne(`UPDATE users SET disabled = ? WHERE username = ?`, disabled, username)
 }
 
 // Delete removes the account, its file rows, its tokens, and its shares.
@@ -274,47 +264,31 @@ func (s *Store) SetAdmin(actorID int64, username string, admin bool) error {
 // delete destroys user bytes, and the directory left behind is what makes
 // re-creating the account a recovery rather than a fresh start.
 func (s *Store) Delete(actorID int64, username string) error {
-	return s.guarded(actorID, username, `DELETE FROM users WHERE username = ?`)
+	if err := s.refuseSelf(actorID, username); err != nil {
+		return err
+	}
+	return s.affectOne(`DELETE FROM users WHERE username = ?`, username)
 }
 
-// guarded runs one of the three operations that can leave an instance with
-// nobody able to administer it — delete, disable, demote — under the two rules
-// that stop it: the target is not the actor, and the target is not the last
-// enabled administrator.
+// refuseSelf is the whole of what keeps an instance administrable.
 //
-// The last-administrator half is a condition on the statement itself rather
-// than a read followed by a write, so two administrators demoting each other at
-// the same moment cannot both find another administrator and both succeed.
-func (s *Store) guarded(actorID int64, username, stmt string) error {
-	if actorID != 0 {
-		actor, err := s.Active(actorID)
-		if err != nil {
-			return err
-		}
-		if actor.Username == username {
-			return ErrSelfAction
-		}
-	}
-
-	const notTheLastAdmin = ` AND (is_admin = 0 OR disabled = 1 OR EXISTS (
-	          SELECT 1 FROM users other
-	           WHERE other.is_admin = 1 AND other.disabled = 0 AND other.username <> ?))`
-
-	res, err := s.db.Exec(stmt+notTheLastAdmin, username, username)
-	if err != nil {
-		return fmt.Errorf("updating account: %w", err)
-	}
-	switch n, err := res.RowsAffected(); {
-	case err != nil:
-		return err
-	case n > 0:
+// There is no other rule because there is no role management: administrator
+// status is written by first-run setup and by nothing else, so no sequence of
+// permitted operations can leave an instance without the administrator it was
+// set up with. What is left to prevent is the accident — the operator removing
+// their own account — and that is a comparison, not a guard.
+func (s *Store) refuseSelf(actorID int64, username string) error {
+	if actorID == 0 {
 		return nil
 	}
-	// Nothing changed: either there is no such account, or the guard refused.
-	if _, err := s.ByUsername(username); err != nil {
+	actor, err := s.Active(actorID)
+	if err != nil {
 		return err
 	}
-	return ErrLastAdmin
+	if actor.Username == username {
+		return ErrSelfAction
+	}
+	return nil
 }
 
 // ByUsername looks an account up by name.

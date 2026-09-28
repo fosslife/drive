@@ -82,7 +82,7 @@ bytes are already counted), permanent delete and folder creation.
 
 ### `PATCH /api/admin/users/{username}` replaces `POST .../disabled`
 
-One endpoint takes `disabled`, `is_admin`, and `quota_bytes`, each optional, applied in one statement.
+One endpoint takes `disabled` and `quota_bytes`, each optional.
 Password reset stays separate at `POST /api/admin/users/{username}/password`, because a secret in a
 general-purpose patch body is a secret that ends up in a log line someone added for debugging.
 
@@ -102,23 +102,30 @@ then silently stops logging anyone out. The epoch is two columns of arithmetic a
 API tokens are deliberately unaffected — a token is revoked by revoking it, and a password change that
 killed an account's automation would be a surprise nobody asked for.
 
-### The last-administrator rule lives in `auth.Store`
+### There is no role management, so there is almost no rule to enforce
 
-`Delete`, `SetDisabled`, and the new `SetAdmin` refuse when the target is the last enabled administrator,
-and refuse when the target is the caller. The caller's identity has to reach the store for the second half,
-so those methods take the acting user's id. The handlers translate the error to `409`; they do not decide
-it. `requireAdmin` stays exactly what it is: a check that the caller is an administrator.
+An instance has one administrator, created by first-run setup. Nothing else writes `is_admin`: no promote,
+no demote, no hand-over, no `is_admin` field on account creation or on the patch endpoint.
 
-The condition is evaluated in the same statement that makes the change, so two administrators demoting each
-other at the same moment cannot both succeed:
+The first cut of this design had two rules instead — refuse to remove the last enabled administrator, and
+refuse to act on your own account — and the first of them turned out to be unreachable over HTTP. Whoever
+is calling is an enabled administrator, so a *different* enabled administrator as the target means two
+exist and the guard never fires; the only way the target could be the last one is if it is the caller,
+which the second rule already refused. A correlated subquery on every destructive statement, to enforce an
+invariant that nothing could violate.
 
-```sql
-UPDATE users SET is_admin = 0
- WHERE username = ? AND (SELECT COUNT(*) FROM users WHERE is_admin = 1 AND disabled = 0) > 1
-```
+Removing role management entirely makes the invariant structural rather than enforced: with no way to
+grant or revoke the status, no sequence of permitted operations can leave an instance without its
+administrator. One rule survives, and it is the one that catches the actual accident — you cannot delete
+or disable your own account. It is an `if` on the username, not SQL.
 
-`ponytail: one guarded statement per operation rather than a transaction with a read and a write; if a
-third rule of this shape appears, put them all behind one transaction in the store.`
+What this gives up, deliberately: a second administrator, and handing the drive to someone else without
+handing over the password. Both are outside a product whose users are an operator and the family they gave
+accounts to.
+
+Rejected: keeping the last-administrator guard as defence in depth for a future caller that administers
+without an acting user. There is no such caller, and an unreachable guard is a thing to maintain and
+misread, not a safety net.
 
 ### Administrator status does not grant file access
 
@@ -163,9 +170,13 @@ Server-side authorization is the real gate; hiding the tab is presentation.
 - **Abandoned uploads reserve quota until the retention sweep** → Bounded by `DRIVE_UPLOAD_RETENTION`
   (24h default) and visible: the refusal names the pending reservation, so it is explainable rather than
   mysterious.
-- **An administrator can lock themselves out by demoting a colleague and losing their own password** →
-  The last-administrator rule prevents zero administrators; it cannot prevent a forgotten password. The
-  recovery path stays what it is today: the operator has the data directory.
+- **An administrator who forgets their password has no way back in** → First-run setup only reopens when
+  the instance has no accounts at all, so an instance with family members on it and a locked-out operator
+  can currently only be repaired by editing `index.db` by hand, which this project's rules put out of
+  bounds as an operation. This is true today and is not made worse by dropping hand-over: hand-over needs
+  you to still be signed in, so it never helped the case that actually happens. The fix is to reopen the
+  setup token when an instance has no enabled administrator; it is in `BACKLOG.md` rather than here,
+  because it changes what a printed setup token can do and deserves its own decision.
 
 ## Migration Plan
 

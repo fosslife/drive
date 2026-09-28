@@ -3,7 +3,7 @@
 - [x] 1.1 Append migration `schemaV6` adding `users.quota_bytes INTEGER NOT NULL DEFAULT 0` and `users.sessions_valid_from INTEGER NOT NULL DEFAULT 0`, editing no shipped migration; verify a test opens a v5 index, migrates, and asserts `PRAGMA user_version` is 6 with every existing account unchanged and unlimited
 - [x] 1.2 Add `Store.SetPassword(username, newPassword)` and `Store.ChangePassword(userID, current, new)`, both re-hashing with Argon2id and bumping `sessions_valid_from`; verify a test asserts the new password authenticates, the old one does not, and a wrong `current` is refused without changing the stored hash
 - [x] 1.3 Record the login time in the session and reject a session older than its account's `sessions_valid_from`; verify a test authenticates a session, resets that account's password, and asserts the session no longer authenticates while an API token for the same account still does
-- [x] 1.4 Add `Store.SetAdmin(actorID, username, admin)` and route `SetDisabled`/`Delete` through the same guard, each refusing in one statement when the target is the last enabled administrator or is the actor; verify a table-driven test covers delete, disable, and demote against the sole administrator, self-demotion with a second administrator present, and the allowed case
+- [x] 1.4 Refuse `SetDisabled` and `Delete` when the target is the acting administrator's own account, and offer no way at all to grant or revoke administrator status; verify a table-driven test covers delete and disable of your own account, the same operations on somebody else's, and that the store exposes no role-changing method
 - [x] 1.5 Add `Store.Usage(userID)` returning bytes and file count from `files` (`kind='file'`, state `present` or `trashed`) plus the declared size of unfinished `uploads`; verify a test asserts a trashed file still counts, a purged one does not, a `missing` row does not, and an in-flight upload reserves its declared size
 - [x] 1.6 Add `Store.SetQuota(username, bytes)` and carry `quota_bytes` on `User`, with `Create` taking its initial value from configuration; verify a test asserts a quota below current usage is stored and no file row or byte is touched
 
@@ -13,7 +13,7 @@
 
 ## 3. Account API
 
-- [x] 3.1 Replace `POST /api/admin/users/{username}/disabled` with `PATCH /api/admin/users/{username}` accepting optional `disabled`, `is_admin`, and `quota_bytes`; verify a test asserts each field applies alone, an empty body changes nothing, and the removed route is gone from the route table
+- [x] 3.1 Replace `POST /api/admin/users/{username}/disabled` with `PATCH /api/admin/users/{username}` accepting optional `disabled` and `quota_bytes`, and drop `is_admin` from account creation; verify a test asserts each field applies alone, an empty body changes nothing, the removed route is gone, and a request that tries to set `is_admin` anywhere is refused
 - [x] 3.2 Add `POST /api/admin/users/{username}/password` (administrator reset) and `POST /api/me/password` (self-service, current password required, rate-limited on the failed-login limiter); verify tests assert a non-administrator cannot reset another account, a wrong current password is refused and counts towards the limit, and neither endpoint ever returns a password hash
 - [x] 3.3 Report usage in the admin inventory: extend `GET /api/admin/users` with `created_at`, `quota_bytes`, `usage_bytes`, and `file_count`; verify a test asserts the figures match what an independent count of the account's files and trash produces
 - [x] 3.4 Extend `GET /api/me` with `quota_bytes` and `usage_bytes` for the signed-in account only; verify a test asserts one account cannot read another's figures from it
@@ -38,8 +38,8 @@
 
 - [ ] 6.1 Add the accounts screen in a new `web/src/admin.jsx` at `/accounts`, a fifth series in the nav rendered only when `/api/me` reports `is_admin`; verify a node test of the route/visibility logic and an e2e assertion that the tab is absent for a non-administrator
 - [ ] 6.2 List every account with role, state, created, usage against quota, and file count, in the interface's existing notes-column idiom; verify an e2e test asserts two accounts appear with their figures
-- [ ] 6.3 Wire the lifecycle actions — create, disable, enable, delete, grant and revoke administrator, reset password, set and clear quota; verify an e2e test creates an account, signs in as it, and asserts it sees an empty drive of its own
-- [ ] 6.4 Surface the API's refusals as the reason, not a generic failure; verify an e2e test attempts to demote the only administrator and asserts the stated reason appears on screen and the row is unchanged
+- [ ] 6.3 Wire the lifecycle actions — create, disable, enable, delete, reset password, set and clear quota; verify an e2e test creates an account, signs in as it, and asserts it sees an empty drive of its own
+- [ ] 6.4 Surface the API's refusals as the reason, not a generic failure; verify an e2e test attempts to disable the administrator's own account and asserts the stated reason appears on screen and the row is unchanged
 - [ ] 6.5 Add the instance panel and the rescan button to the same screen; verify an e2e test asserts version, data directory, and free space are shown and that pressing rescan reports indexing
 
 ## 7. Interface: the account's own card
@@ -51,5 +51,5 @@
 ## 8. Documentation and close-out
 
 - [ ] 8.1 Document `DRIVE_DEFAULT_QUOTA_BYTES` in `README.md` and the `CLAUDE.md` environment list, and the quota's reach — application writes only, not SSH or rsync — where the storage rules are stated; verify the variable appears in both lists and the caveat is stated once, not twice
-- [ ] 8.2 Record the design decisions worth keeping in `DECISIONS.md`: usage computed never stored, pending uploads reserving quota, the session epoch over deleting session rows, quota checked above `storage` rather than inside it; verify each entry names the alternative it rejected
+- [ ] 8.2 Record the design decisions worth keeping in `DECISIONS.md`: usage computed never stored, pending uploads reserving quota, the session epoch over deleting session rows, quota checked above `storage` rather than inside it, and one administrator assigned once instead of a role system with guards; verify each entry names the alternative it rejected
 - [ ] 8.3 Run the full gate — `go build ./... && go vet ./... && go test ./...`, `npm --prefix web run build`, `npm --prefix web test`, `npm --prefix web run test:e2e` — and verify the route table test still enumerates the same public routes it did before this change

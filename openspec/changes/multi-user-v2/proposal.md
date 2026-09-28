@@ -11,12 +11,12 @@ The daily complaint is the admin surface, not the file surface: the drive is usa
 ## What Changes
 
 - An **Accounts screen**, admin-only, as a fifth series in the interface: every account with its role,
-  state, storage used and file count; create, disable, enable, delete; grant and revoke administrator;
-  reset a password.
+  state, storage used and file count; create, disable, enable, delete; reset a password.
 - **Self-service password change** for every user, current password required. There is none today.
-- **Lockout protection**: the last enabled administrator cannot be deleted, disabled, or demoted, and an
-  administrator cannot perform those three on their own account. These are refused by the API, not only
-  hidden by the interface.
+- **One administrator, assigned once.** First-run setup creates it and nothing else ever writes the flag:
+  there is no promote, no demote, no hand-over, and therefore no rule anyone has to enforce to keep an
+  instance administrable. The one refusal that remains is that an administrator cannot delete or disable
+  their own account, refused by the API rather than hidden by the interface.
 - **Credential changes end sessions.** Changing or resetting a password invalidates that account's
   existing browser sessions; disable and delete already take effect on the next request.
 - **Per-user quotas.** An optional byte allowance per account, settable by an administrator, with a
@@ -43,25 +43,27 @@ one. No sync client, no change feed — nothing consumes one yet.
 
 ### Modified Capabilities
 
-- `auth`: adds self-service password change, administrator password reset, administrator role changes,
-  the last-administrator rule, and session invalidation on a credential change. The existing
-  "Administrator manages accounts" scenario grows the cases it has to survive.
+- `auth`: adds self-service password change, administrator password reset, session invalidation on a
+  credential change, and the rule that administrator status is assigned by first-run setup and by nothing
+  else. The existing "Administrator manages accounts" scenario grows the cases it has to survive.
 - `storage`: adds a per-user quota alongside the existing free-space reserve — two separate limits with
   two separate reasons, both refusing the write and saying which one refused it.
 
 ## Impact
 
-- `internal/auth`: `Store` gains password change/reset, `SetAdmin`, quota read/write, a usage query, and
-  the last-admin guard. New migration: `quota_bytes` and a session-epoch column on `users`.
+- `internal/auth`: `Store` gains password change/reset, quota read/write, a usage query, and a refusal to
+  act on the caller's own account. New migration: `quota_bytes` and a session-epoch column on `users`.
 - `internal/index`: one appended migration. Nothing existing is edited.
-- `internal/server`: `/api/me/password`, `/api/admin/users/{username}` (role, quota, disabled),
+- `internal/server`: `/api/me/password`, `/api/admin/users/{username}` (quota, disabled),
   `/api/admin/users/{username}/password`, `/api/admin/instance`, `/api/admin/scan`; `/api/me` and the
   admin user list grow usage fields. Every new route is authenticated; the route table test's hardcoded
   public list does not change.
 - **BREAKING**: `POST /api/admin/users/{username}/disabled` is replaced by
-  `PATCH /api/admin/users/{username}`, which sets role, quota, and disabled state through one endpoint.
+  `PATCH /api/admin/users/{username}`, which sets quota and disabled state through one endpoint.
   Nothing ships that calls the old route — no screen reaches it and no documentation names it — so it is
   replaced rather than kept as a second way to do one thing.
+- **BREAKING**: `POST /api/admin/users` no longer takes `is_admin`. Administrator status comes from
+  first-run setup and from nothing else.
 - `internal/storage` / upload path: quota checked where `CheckSpace` already guards free space, so both
   limits are refused in one place.
 - `internal/config`: `DRIVE_DEFAULT_QUOTA_BYTES`, defaulted to unlimited.

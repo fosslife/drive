@@ -330,14 +330,13 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		credentials
-		IsAdmin bool `json:"is_admin"`
-	}
+	// No is_admin: administrator status comes from first-run setup and from
+	// nowhere else, so an unknown field here is a 400 rather than a promotion.
+	var in credentials
 	if !decode(w, r, &in) {
 		return
 	}
-	u, err := s.users.Create(in.Username, in.Password, in.IsAdmin)
+	u, err := s.users.Create(in.Username, in.Password, false)
 	switch {
 	case errors.Is(err, auth.ErrUserExists):
 		writeError(w, http.StatusConflict, err.Error())
@@ -354,7 +353,6 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Disabled   *bool  `json:"disabled"`
-		IsAdmin    *bool  `json:"is_admin"`
 		QuotaBytes *int64 `json:"quota_bytes"`
 	}
 	if !decode(w, r, &in) {
@@ -372,12 +370,6 @@ func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if in.IsAdmin != nil {
-		if err := s.users.SetAdmin(actor, username, *in.IsAdmin); err != nil {
-			s.userChange(w, err)
-			return
-		}
-	}
 	if in.Disabled != nil {
 		if err := s.users.SetDisabled(actor, username, *in.Disabled); err != nil {
 			s.userChange(w, err)
@@ -386,7 +378,7 @@ func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 	}
 	// A body that named nothing changed nothing, which is not an error: the
 	// account has to exist, though, or this reported success about nobody.
-	if in.QuotaBytes == nil && in.IsAdmin == nil && in.Disabled == nil {
+	if in.QuotaBytes == nil && in.Disabled == nil {
 		if _, err := s.users.ByUsername(username); err != nil {
 			s.userChange(w, err)
 			return
@@ -417,9 +409,9 @@ func (s *Server) userChange(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, auth.ErrNotFound):
 		writeError(w, http.StatusNotFound, "no such account")
-	case errors.Is(err, auth.ErrLastAdmin), errors.Is(err, auth.ErrSelfAction):
+	case errors.Is(err, auth.ErrSelfAction):
 		// A conflict rather than a refusal of authority: the caller is allowed
-		// to do this, to somebody else, once somebody else is an administrator.
+		// to do this — to any account but their own.
 		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, auth.ErrInvalidValue), errors.Is(err, auth.ErrInvalidUsername):
 		writeError(w, http.StatusBadRequest, err.Error())

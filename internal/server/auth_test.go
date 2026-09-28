@@ -374,7 +374,7 @@ func TestAdministratorManagesAccounts(t *testing.T) {
 	}
 
 	if w := as(admin, "POST", "/api/admin/users", map[string]any{
-		"username": "ada", "password": testPassword, "is_admin": false,
+		"username": "ada", "password": testPassword,
 	}); w.Code != http.StatusCreated {
 		t.Fatalf("creating an account: %d %s", w.Code, w.Body.String())
 	}

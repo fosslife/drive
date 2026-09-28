@@ -44,6 +44,18 @@ v1 is users with isolated roots plus public share links. Group membership, share
 folders between users, and per-path ACLs are a natural next step. The permission check
 must be centralized from day one so this is an extension rather than a rewrite.
 
+### Recovering a locked-out administrator
+An instance has one administrator, created by first-run setup, and nothing grants or revokes the
+status. If that password is forgotten there is no way back in: setup only reopens when the
+instance has no accounts at all, so an instance with family members on it can only be repaired by
+editing `index.db` by hand — which is exactly the kind of operation this project refuses to
+document.
+
+The fix is small: reopen the setup token when an instance has no *enabled administrator* rather
+than no accounts. It is deferred because it changes what a token printed to the server's own
+output can do — create an administrator on an instance that already holds other people's files —
+and that deserves its own decision rather than riding along with a screen.
+
 ### Quotas
 Per-user storage limits. Needed the moment more than one household is on an instance.
 

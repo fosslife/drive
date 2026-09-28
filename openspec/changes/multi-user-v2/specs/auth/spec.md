@@ -41,31 +41,31 @@ that performed the change MAY remain valid.
 - **WHEN** a user changes their password
 - **THEN** their API tokens continue to authenticate, because a token is revoked by revoking it
 
-### Requirement: The last administrator cannot be locked out
+### Requirement: Administrator status is assigned once, by first-run setup
 
-The system SHALL refuse any operation that would leave the instance with no enabled administrator:
-deleting, disabling, or revoking administrator status from the last enabled administrator. The refusal
-SHALL state the reason.
+An instance SHALL have exactly the administrator that first-run setup created. The system SHALL NOT offer
+any way to grant administrator status to an account or to revoke it from one: not through the API, not
+through the interface, not through configuration.
 
-An administrator SHALL NOT delete, disable, or revoke administrator status from their own account, so that
-losing the surface is always another administrator's decision.
+An administrator SHALL NOT delete or disable their own account. That refusal SHALL come from the API, not
+only from the interface, and it is the only rule needed to keep an instance administrable — with no way to
+grant or revoke the status, no sequence of permitted operations can leave an instance without the
+administrator it was set up with.
 
-These rules SHALL be enforced by the API, not only by the interface.
+#### Scenario: No endpoint grants administrator status
 
-#### Scenario: Last administrator is protected
+- **WHEN** any client asks for an account to be made an administrator, by any request the system accepts
+- **THEN** no account's administrator status changes
 
-- **WHEN** the only enabled administrator is deleted, disabled, or demoted through any client
+#### Scenario: An administrator cannot remove themselves
+
+- **WHEN** an administrator deletes or disables their own account
 - **THEN** the operation is refused with a message naming the reason, and the account is unchanged
 
-#### Scenario: Self-demotion is refused
+#### Scenario: Ordinary accounts are administered freely
 
-- **WHEN** an administrator revokes their own administrator status, disables their own account, or deletes it
-- **THEN** the operation is refused even when other administrators exist
-
-#### Scenario: Demotion is allowed once another administrator exists
-
-- **WHEN** a second administrator exists and one of them demotes the other
-- **THEN** the operation succeeds and the demoted account loses the administrative surface on its next request
+- **WHEN** an administrator deletes or disables any account other than their own
+- **THEN** the operation succeeds
 
 ## MODIFIED Requirements
 
@@ -82,7 +82,7 @@ Administrator status SHALL confer the ability to administer accounts, quotas, an
 
 #### Scenario: Administrator manages accounts
 
-- **WHEN** an administrator creates, disables, enables, deletes, re-roles, resets the password of, or sets a quota on a user account
+- **WHEN** an administrator creates, disables, enables, deletes, resets the password of, or sets a quota on a user account
 - **THEN** the change takes effect on that user's subsequent requests
 - **AND** deleting an account does not delete another user's files
 

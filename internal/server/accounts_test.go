@@ -50,26 +50,17 @@ func TestPatchAppliesEachFieldOnItsOwn(t *testing.T) {
 			}
 			return ""
 		}},
-		{"role alone", map[string]any{"is_admin": true}, func(a map[string]any) string {
-			if a["is_admin"] != true {
-				return "is_admin did not change"
-			}
-			if a["quota_bytes"] != float64(4096) {
-				return "a role patch moved the quota"
-			}
-			return ""
-		}},
 		{"state alone", map[string]any{"disabled": true}, func(a map[string]any) string {
 			if a["disabled"] != true {
 				return "disabled did not change"
 			}
-			if a["is_admin"] != true || a["quota_bytes"] != float64(4096) {
-				return "a state patch changed role or quota"
+			if a["quota_bytes"] != float64(4096) {
+				return "a state patch moved the quota"
 			}
 			return ""
 		}},
 		{"nothing at all", map[string]any{}, func(a map[string]any) string {
-			if a["disabled"] != true || a["is_admin"] != true || a["quota_bytes"] != float64(4096) {
+			if a["disabled"] != true || a["quota_bytes"] != float64(4096) {
 				return "an empty patch changed something"
 			}
 			return ""
@@ -92,6 +83,24 @@ func TestPatchAppliesEachFieldOnItsOwn(t *testing.T) {
 	// The route this replaced is gone rather than kept as a second way in.
 	if w := h.as(admin, "POST", "/api/admin/users/ada/disabled", map[string]bool{"disabled": true}); w.Code < 400 {
 		t.Errorf("the replaced disabled route answered %d; it must no longer be routed", w.Code)
+	}
+
+	// There is no promotion, anywhere. Both endpoints that touch an account
+	// refuse the field rather than quietly ignoring it.
+	for _, attempt := range []struct{ method, path string }{
+		{"PATCH", "/api/admin/users/ada"},
+		{"POST", "/api/admin/users"},
+	} {
+		body := map[string]any{"username": "grace", "password": testPassword, "is_admin": true}
+		if w := h.as(admin, attempt.method, attempt.path, body); w.Code < 400 {
+			t.Errorf("%s %s with is_admin: %d %s, want a refusal", attempt.method, attempt.path, w.Code, w.Body.String())
+		}
+	}
+	if grace := inventory(t, h, admin)["grace"]; grace != nil && grace["is_admin"] == true {
+		t.Error("an account was created as an administrator through the API")
+	}
+	if listed := inventory(t, h, admin); listed["root"]["is_admin"] != true || listed["ada"]["is_admin"] != false {
+		t.Errorf("administrator status after every attempt: root %v, ada %v", listed["root"]["is_admin"], listed["ada"]["is_admin"])
 	}
 }
 
@@ -229,14 +238,8 @@ func TestAccountRefusalsCarryTheirReason(t *testing.T) {
 		status int
 		reason string
 	}{
-		// The last-administrator guard is not reachable from here, and that is
-		// not a gap: whoever is calling is an enabled administrator, so a
-		// different enabled administrator as the target means two of them
-		// exist. What stops an administrator being the last one out is the
-		// self-action rule below. The guard itself is covered in
-		// internal/auth, where a caller with no identity can reach it.
-		{"demote your own account", "PATCH", "/api/admin/users/root",
-			map[string]any{"is_admin": false}, http.StatusConflict, "own account"},
+		{"disable your own account", "PATCH", "/api/admin/users/root",
+			map[string]any{"disabled": true}, http.StatusConflict, "own account"},
 		{"delete your own account", "DELETE", "/api/admin/users/root",
 			nil, http.StatusConflict, "own account"},
 		{"unknown account", "DELETE", "/api/admin/users/nobody",
@@ -258,17 +261,9 @@ func TestAccountRefusalsCarryTheirReason(t *testing.T) {
 		})
 	}
 
-	// Self-action, which needs a second administrator to prove it is the rule
-	// refusing rather than the last-administrator one.
-	h.account("second", true)
-	for _, body := range []any{map[string]any{"is_admin": false}, map[string]any{"disabled": true}} {
-		if w := h.as(admin, "PATCH", "/api/admin/users/root", body); w.Code != http.StatusConflict ||
-			!strings.Contains(w.Body.String(), "own account") {
-			t.Errorf("patching your own account with %v: %d %s, want 409 naming it", body, w.Code, w.Body.String())
-		}
-	}
-	if w := h.as(admin, "DELETE", "/api/admin/users/root", nil); w.Code != http.StatusConflict {
-		t.Errorf("deleting your own account: %d %s, want 409", w.Code, w.Body.String())
+	// The administrator is still there after every refusal above.
+	if root := inventory(t, h, admin)["root"]; root["disabled"] != false || root["is_admin"] != true {
+		t.Errorf("the administrator after the refusals: %v", root)
 	}
 }
 
