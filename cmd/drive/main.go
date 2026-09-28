@@ -89,7 +89,7 @@ func run() error {
 	}
 	if setupToken != "" {
 		slog.Warn("no account exists yet: open this URL to create the first administrator",
-			"url", setupURL(listener.Addr(), encrypted, setupToken))
+			"url", setupURL(listener.Addr(), encrypted, cfg.Hostname, setupToken))
 	}
 
 	// Secure cookies follow the listener: set unconditionally they would not be
@@ -177,10 +177,11 @@ func expireTrash(ctx context.Context, db *index.DB, dataDir string, ttl time.Dur
 	}
 }
 
-// setupURL is the address an operator can actually paste into a browser. A
-// wildcard listener answers on every address and so names none of them;
+// setupURL is the address an operator can actually paste into a browser. The
+// configured hostname is the public name when there is one; otherwise a
+// wildcard listener answers on every address and so names none of them, and
 // localhost is the one that always reaches it from the machine reading this log.
-func setupURL(addr net.Addr, encrypted bool, token string) string {
+func setupURL(addr net.Addr, encrypted bool, hostname, token string) string {
 	scheme := "http"
 	if encrypted {
 		scheme = "https"
@@ -189,8 +190,13 @@ func setupURL(addr net.Addr, encrypted bool, token string) string {
 	if err != nil {
 		host, port = addr.String(), ""
 	}
-	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+	if hostname != "" {
+		host = hostname
+	} else if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
 		host = "localhost"
+	}
+	if port == "80" && !encrypted || port == "443" && encrypted {
+		port = "" // the default for the scheme: a browser adds it back
 	}
 	if port != "" {
 		host = net.JoinHostPort(host, port)

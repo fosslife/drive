@@ -2,6 +2,10 @@
 /data/
 /dist/
 
+# One deployment's settings, possibly including a mail address. .env.example is
+# the one that is checked in.
+/.env
+
 # Agent tooling: local to whoever is driving it, not part of the project.
 /.claude/
 /.impeccable/

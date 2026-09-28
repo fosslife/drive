@@ -121,6 +121,10 @@ users/<username>/         storage root, user files at their real paths
   a test enumerates the slice against a hardcoded list. Making a route public is a reviewed decision.
 - **Stored files are served as attachments** with `nosniff` and a restrictive CSP. Inline only for inert raster images — never SVG, never PDF.
 - **Every config value has a working default.** No config file, ever. Env overrides only, `DRIVE_*`.
+  `.env` is compose's, never the binary's: compose passes it as environment, and a missing one changes
+  nothing. `.env.example` documents every variable and its default, and
+  `internal/config/env_example_test.go` fails the build when one is added, removed, or defaulted
+  differently without it being updated — so there is nothing here to remember.
 - **`DRIVE_HOSTNAME` is the only switch for HTTPS.** Set, the drive gets a real certificate by ACME and
   renews it. Unset, it serves plaintext and generates nothing — it never signs a certificate for itself,
   because a browser warning on first run is not security. Plaintext off loopback warns at every start.

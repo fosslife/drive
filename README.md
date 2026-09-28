@@ -79,8 +79,12 @@ One service, one volume, one port. The image is `ghcr.io/fosslife/drive`, publis
 arm64 on every release tag, and it contains the same static binary and nothing else — no runtime, no
 database server, no web server. Upgrading is `podman compose pull && podman compose up -d`.
 
-The setup URL in the log says `localhost`, because a container cannot know the name you reach it by.
-Keep the token, swap the host.
+Settings go in a `.env` beside it — copy [.env.example](.env.example), uncomment what you want, and
+`up -d` again. Every variable in it is already defaulted, so there is nothing to write until you want
+something changed, and compose ignores the file if it is not there.
+
+The setup URL in the log says `localhost` unless `DRIVE_HOSTNAME` tells it otherwise, because
+nothing else tells a container the name you reach it by. Keep the token, swap the host.
 
 Images and binaries are signed as they are built, so you can check that what you pulled came out of
 this repository before you run it: `gh attestation verify oci://ghcr.io/fosslife/drive:latest --repo

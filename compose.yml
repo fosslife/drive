@@ -16,17 +16,18 @@ services:
   drive:
     image: ghcr.io/fosslife/drive:latest
     ports:
-      - "8080:8080"
+      - "${DRIVE_PUBLISH:-8080:8080}"
     volumes:
       - ./data:/data
-    environment:
-      # Nothing is required. As it stands this serves plaintext on 8080, which
-      # is what you want behind a proxy that terminates TLS, or on a Tailscale
-      # address, or while trying the thing out.
-      #
-      # Facing the public internet directly instead? Name it, and certificates
-      # become automatic — then publish 443:443 rather than 8080:8080.
-      #   DRIVE_HOSTNAME: drive.example.com
-      #   DRIVE_ACME_EMAIL: you@example.com
-      DRIVE_TRASH_RETENTION: 720h
+    # Nothing is required: as it stands this serves plaintext on 8080, which is
+    # what you want behind a proxy that terminates TLS, or on a Tailscale
+    # address, or while trying the thing out. Facing the public internet
+    # directly instead? Set DRIVE_HOSTNAME and certificates become automatic.
+    #
+    # Settings go in .env — copy .env.example, uncomment, `up -d` again. The
+    # file is optional and every value it can hold is already defaulted, so
+    # there is nothing to write until you want something changed.
+    env_file:
+      - path: .env
+        required: false
     restart: unless-stopped
